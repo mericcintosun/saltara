@@ -24,6 +24,25 @@ export default async function Home() {
         </p>
       </header>
 
+      <p className="mt-6 text-lg leading-relaxed">
+        For PE teachers and coaches with a laptop and no equipment budget: one student jumps, Saltara gives the height
+        in centimetres about a second after landing, and the whole class downloads as a CSV.
+      </p>
+      <p className="mt-2 flex flex-wrap gap-x-6 text-lg">
+        <Link
+          href="#stand"
+          className="inline-flex min-h-11 items-center font-bold text-primary underline decoration-sun decoration-2 underline-offset-4"
+        >
+          Start with chapter one
+        </Link>
+        <Link
+          href="/play"
+          className="inline-flex min-h-11 items-center font-bold text-primary underline decoration-sun decoration-2 underline-offset-4"
+        >
+          Open the jump lab
+        </Link>
+      </p>
+
       <div className="mt-10 overflow-hidden rounded-3xl">
         <SceneSlot
           n={1}

@@ -155,7 +155,14 @@ async function head(url: string): Promise<Probe> {
 async function proveEngine(): Promise<Block> {
   try {
     const src = readFileSync(join(ROOT, "lib", "pose-tracker.ts"), "utf8");
-    const urls = [...new Set(src.match(/https:\/\/[^\s"'`]+/g) ?? [])];
+    // A WASM folder URL answers 404 to HEAD, so probe the two files the runtime actually fetches from it.
+    const found = [...new Set(src.match(/https:\/\/[^\s"'`]+/g) ?? [])];
+    const urls = found.flatMap((u) => {
+      const base = u.replace(/\/+$/, "");
+      return base.endsWith("/wasm")
+        ? [`${base}/vision_wasm_internal.js`, `${base}/vision_wasm_internal.wasm`]
+        : [u];
+    });
     if (urls.length === 0) {
       const body = notRun("no https URL found in lib/pose-tracker.ts");
       return { name: "engine", body, summary: `engine: ${body}` };
