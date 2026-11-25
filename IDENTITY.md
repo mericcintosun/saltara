@@ -85,3 +85,5 @@ Rules:
 ## Amendments (append-only; later phases add dated lines here, never edit anything above)
 
 2026-11-25 Phase 4: signature 2 ships in components/height-figure.tsx (useSpring overshoot on the cm figure).
+2026-11-25 Phase 5: signature 3 ships in components/hero-arc.tsx (magnetic pull and tilt on the seeded j-02 arc, slider keys as the alternative); placement: first screen sig 3, /play core action sig 2, / chapters sig 1.
+2026-11-25 Phase 5: components/ui/button.tsx gains size icon; scene slots 4 to 6 added on /play and the 404 page.

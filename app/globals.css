@@ -111,9 +111,48 @@ h2 {
   }
 }
 
+/* The same M4 wipe drawn as a ruled line: a 2px rule in LINE with a sun dot at its
+   start, used between the standfirst and the hero figure and above each chapter. */
+@keyframes saltara-rule {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.saltara-rule-line {
+  position: relative;
+  height: 0.75rem;
+  background: linear-gradient(var(--line), var(--line)) left 0.375rem center / calc(100% - 0.375rem) 2px no-repeat;
+  animation: saltara-rule 600ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+.saltara-rule-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: var(--sun);
+}
+
+@supports (animation-timeline: view()) {
+  .saltara-rule-scroll {
+    animation: saltara-rule 600ms cubic-bezier(0.65, 0, 0.35, 1) both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 80%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .saltara-wipe,
-  .saltara-wipe-scroll {
+  .saltara-wipe-scroll,
+  .saltara-rule-line,
+  .saltara-rule-scroll {
     animation: none;
     clip-path: none;
   }
