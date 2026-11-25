@@ -44,7 +44,7 @@ npm run dev
 # open http://localhost:3000
 ```
 
-No environment variables are needed (see `.env.example`). The camera needs HTTPS or `localhost`.
+No secrets are needed (see `.env.example`). `ADAPTER_MODE` picks the data adapter and defaults to `fake`, which serves the seeded class 9B fixtures. `npm run seed` validates `fixtures/*.json` and rewrites them in a stable order; running it twice changes nothing. The camera needs HTTPS or `localhost`.
 
 Routes:
 

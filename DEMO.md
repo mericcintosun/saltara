@@ -1,0 +1,24 @@
+# DEMO: Saltara
+
+**Problem:** force plates cost hundreds to thousands of dollars, so most PE lessons measure the jump with chalk or not at all.
+
+**Trigger:** a teacher opens the page on a classroom laptop.
+
+**Wow moment:** the presenter jumps once on Zoom, the airborne hip points drop onto the plot, a parabola settles over them, and "34 cm" appears with "scale from gravity: 412 px/m" underneath, with no ruler entered.
+
+**Closing line:** "Gravity is already a free ruler."
+
+**Demo start route:** `/`
+
+## Steps
+
+1. `/` (`app/page.tsx`): the story headline and the five chapters walk one recorded jump through the method. Throw the deck once.
+2. `/play` (`app/play/page.tsx`): Start camera shows the mirrored video, plum skeleton, sun-yellow hip dot and fps badge.
+3. `/play` (`app/play/page.tsx`): replay j-02 or jump live. The trajectory plot shows the fitted arc, the cm result, "scale from gravity" in px/m, and the three estimates side by side.
+4. `/play` (`app/play/page.tsx`): class list with three names and three attempts each, best marked, CSV download.
+5. `/notes` (`app/notes/page.tsx`): the Bland-Altman plot, with the placeholder label shown until the real pilot replaces it.
+6. Back on `/play` (`app/play/page.tsx`): the last arc on screen and the closing line.
+
+## Seeded vs live
+
+The twelve jumps of class 9B are seeded: they live in `fixtures/lesson-9b.json` and reach the pages through `lib/data/seed.ts` and `lib/adapter.ts` (`ADAPTER_MODE=fake`). `traceFor()` rebuilds each one frame by frame with a fixed PRNG, and the real solver runs on it. The pilot rows in `fixtures/pilot-placeholder.json` are placeholders and are labelled as such on `/notes`. Live camera jumps (step 2 and the live path of step 3) run in the browser and are never seeded.
