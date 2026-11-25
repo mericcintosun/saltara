@@ -6,31 +6,44 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { bestOf, MAX_ATTEMPTS, type AttemptOrigin, type RosterStudent } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-export interface RosterStudent {
-  id: string;
-  name: string;
-  /** Up to three attempts, flight-time height in cm. */
-  attempts: number[];
-}
+export { bestOf, MAX_ATTEMPTS, type RosterAttempt, type RosterStudent } from "@/lib/store";
 
-export const MAX_ATTEMPTS = 3;
-
-export function bestOf(s: RosterStudent): number | null {
-  return s.attempts.length ? Math.max(...s.attempts) : null;
-}
+const SOURCE_LABEL: Record<AttemptOrigin, string> = { seed: "seeded", camera: "camera", file: "clip" };
 
 function toCsv(roster: RosterStudent[], lessonName: string): string {
-  const head = ["class", "student", "attempt_1_cm", "attempt_2_cm", "attempt_3_cm", "best_cm", "method"];
+  const head = [
+    "class",
+    "student",
+    ...Array.from({ length: MAX_ATTEMPTS }, (_, i) => [`attempt_${i + 1}_cm`, `attempt_${i + 1}_source`]).flat(),
+    "best_cm",
+    "method",
+  ];
   const rows = roster.map((s) => [
     lessonName,
     s.name,
-    ...Array.from({ length: MAX_ATTEMPTS }, (_, i) => (s.attempts[i] !== undefined ? s.attempts[i].toFixed(1) : "")),
+    ...Array.from({ length: MAX_ATTEMPTS }, (_, i) => {
+      const a = s.attempts[i];
+      return a ? [a.cm.toFixed(1), SOURCE_LABEL[a.origin]] : ["", ""];
+    }).flat(),
     bestOf(s)?.toFixed(1) ?? "",
     "parabola flight time",
   ]);
   return [head, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+}
+
+function RosterEmptyState({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-background p-4 text-sm">
+      <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
+      <p className="flex-1 text-muted-foreground">No students yet. Add a name above, or bring back the demo class.</p>
+      <Button size="sm" variant="soft" onClick={onReset}>
+        <RotateCcw /> Restore demo class
+      </Button>
+    </div>
+  );
 }
 
 /** Class mode: who is jumping, their three attempts, best mark, CSV export. */
@@ -89,9 +102,7 @@ export function ClassRoster({
         </form>
 
         {roster.length === 0 ? (
-          <p className="rounded-2xl bg-background p-4 text-sm text-muted-foreground">
-            No students yet. Add a name above, or restore the demo class.
-          </p>
+          <RosterEmptyState onReset={onReset} />
         ) : (
           <div className="overflow-x-auto rounded-2xl">
           <ul className="min-w-max space-y-2 sm:min-w-0">
@@ -111,10 +122,21 @@ export function ClassRoster({
                       {s.name}
                     </span>
                     <span className="flex items-center gap-3 font-normal">
-                      <span className="tabular-nums">
-                        {Array.from({ length: MAX_ATTEMPTS }, (_, i) =>
-                          s.attempts[i] !== undefined ? s.attempts[i].toFixed(1) : "·"
-                        ).join("  ")}
+                      <span className="flex items-center gap-3 tabular-nums">
+                        {Array.from({ length: MAX_ATTEMPTS }, (_, i) => {
+                          const attempt = s.attempts[i];
+                          if (!attempt) return <span key={i}>·</span>;
+                          return (
+                            <span key={attempt.key} className="flex items-center gap-1" data-origin={attempt.origin}>
+                              {attempt.cm.toFixed(1)}
+                              {attempt.origin === "seed" && (
+                                <Badge variant="sun" className="px-2 py-0.5 font-normal">
+                                  seeded
+                                </Badge>
+                              )}
+                            </span>
+                          );
+                        })}
                       </span>
                       {best !== null && best === classBest ? (
                         <Badge variant="sun">best {best.toFixed(1)}</Badge>

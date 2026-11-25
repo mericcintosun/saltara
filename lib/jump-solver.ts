@@ -134,6 +134,8 @@ export interface AnalyzeOptions {
   /** Known standing baseline (the live watcher captures it before take-off). */
   standingHipY?: number;
   standingAnkleY?: number;
+  /** Skip the [core] console trace (the seeded class list solves 12 jumps on load). */
+  quiet?: boolean;
 }
 
 /** True when shoulder width (where known) changes by more than SHOULDER_DRIFT_MAX across the clip. */
@@ -156,8 +158,11 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
   const n = samples.length;
   const fps = n > 1 ? (n - 1) / (samples[n - 1].t - samples[0].t) : 0;
   const flags: JumpFlags = { drift: shoulderDrift(samples) };
+  const log = (step: string, detail: Record<string, unknown>) => {
+    if (!opts.quiet) console.info(`${CORE_LOG_PREFIX} ${step}`, detail);
+  };
   const fail = (code: CoreErrorCode, partial: Partial<JumpAnalysis> = {}, reason: string = hintFor(code)): JumpAnalysis => {
-    console.info(`${CORE_LOG_PREFIX} rejected`, { code });
+    log("rejected", { code });
     return {
       ok: false,
       code,
@@ -202,7 +207,7 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
   if (takeoffIndex < 1) {
     return fail("no_jump", { standingHipY, standingAnkleY }, "No take-off found in this clip. Stand still for a second, then jump straight up.");
   }
-  console.info(`${CORE_LOG_PREFIX} take-off`, { frame: takeoffIndex, t: Number(samples[takeoffIndex].t.toFixed(3)) });
+  log("take-off", { frame: takeoffIndex, t: Number(samples[takeoffIndex].t.toFixed(3)) });
   let landingIndex = -1;
   for (let j = takeoffIndex + 1; j < n; j++) {
     if (rise(samples[j]) <= threshold) {
@@ -213,7 +218,7 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
   if (landingIndex < 0) {
     return fail("no_jump", { standingHipY, standingAnkleY, takeoffIndex }, "No landing found in this clip yet.");
   }
-  console.info(`${CORE_LOG_PREFIX} landing`, { frame: landingIndex, t: Number(samples[landingIndex].t.toFixed(3)) });
+  log("landing", { frame: landingIndex, t: Number(samples[landingIndex].t.toFixed(3)) });
 
   const airborne = samples.slice(takeoffIndex, landingIndex);
   const partial = { standingHipY, standingAnkleY, takeoffIndex, landingIndex, airborneFrames: airborne.length };
@@ -267,7 +272,7 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
     displacementCm: ((standingHipY - apexY) / pxPerMetre) * 100,
   };
 
-  console.info(`${CORE_LOG_PREFIX} fit ok`, {
+  log("fit ok", {
     frames: airborne.length,
     r2: Number(fit.r2.toFixed(3)),
     pxPerMetre: Math.round(pxPerMetre),

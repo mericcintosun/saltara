@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Camera, CameraOff, Film, Rewind, Save, Square } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Camera, CameraOff, Film, RotateCcw, Rewind, Save, Square } from "lucide-react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
-import { ClassRoster, MAX_ATTEMPTS, type RosterStudent } from "@/components/class-roster";
+import { ClassRoster } from "@/components/class-roster";
 import { TrajectoryPlot } from "@/components/trajectory-plot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FILE_PLAYBACK_RATE, MAX_CLIP_MB, MAX_CLIP_SECONDS } from "@/lib/config";
+import { SEED_VERSION } from "@/lib/data/seed";
 import { traceFor } from "@/lib/data/trace";
 import { loadEngine } from "@/lib/engine";
 import { hintFor, isCoreError, type CoreErrorCode } from "@/lib/errors";
@@ -16,7 +18,9 @@ import { analyzeJump, createJumpWatcher, headlineCm, type JumpAnalysis, type Pos
 import { toSample } from "@/lib/live-sample";
 import { readPose, SKELETON_EDGES, LANDMARK, type FramePose } from "@/lib/pose-tracker";
 import { JumpTraceSchema, VideoFileSchema } from "@/lib/schemas";
+import { isDuplicateAttempt, MAX_ATTEMPTS, type ClassState } from "@/lib/store";
 import type { LessonPayload, SourceInfo } from "@/lib/types";
+import { useClassStore } from "@/lib/use-class-store";
 import { cn } from "@/lib/utils";
 
 type Mode = "camera" | "replay" | "file";
@@ -26,26 +30,45 @@ type FileStatus = "idle" | "loading" | "running" | "done";
 type RVFC = (cb: (now: number, meta: { mediaTime: number }) => void) => number;
 type WakeLockNav = { wakeLock: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } };
 
-/** A measured jump from this browser (camera or recorded clip). */
-type Measured = { samples: PoseSample[]; analysis: JumpAnalysis; origin: "camera" | "file"; fileName?: string };
+/**
+ * A measured jump from this browser (camera or recorded clip). `key` is assigned once,
+ * when the object is created, and is the idempotency key for saving it.
+ */
+type Measured = {
+  key: string;
+  samples: PoseSample[];
+  analysis: JumpAnalysis;
+  origin: "camera" | "file";
+  fileName?: string;
+};
 /** A problem with the input itself (camera, engine or file), before any jump is analysed. */
 type InputProblem = { code: CoreErrorCode | null; text: string };
 
-const STORAGE_KEY = "saltara.class.v1";
-
 const DEFAULT_REPLAY = "j-02";
 
-/** The seeded class list: every student of the lesson with their recorded attempts. */
-function seedRoster(payload: LessonPayload): RosterStudent[] {
-  return payload.students.map((s) => ({
-    id: s.id,
-    name: s.name,
-    attempts: payload.jumps
-      .filter((j) => j.studentId === s.id)
-      .map((j) => headlineCm(analyzeJump(traceFor(j))))
-      .filter((v): v is number => v !== null)
-      .map((v) => Math.round(v * 10) / 10),
-  }));
+/** A fresh key for one measurement. randomUUID needs a secure context, which the camera needs anyway. */
+function newResultKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** The seeded class list: every student of the lesson with their recorded attempts, tagged as seeded. */
+function seedRoster(payload: LessonPayload): ClassState {
+  return {
+    version: 2,
+    seedVersion: SEED_VERSION,
+    activeId: payload.students[0]?.id ?? null,
+    roster: payload.students.map((s) => ({
+      id: s.id,
+      name: s.name,
+      attempts: payload.jumps
+        .filter((j) => j.studentId === s.id)
+        .flatMap((j) => {
+          const cm = headlineCm(analyzeJump(traceFor(j), { quiet: true }));
+          return cm === null ? [] : [{ key: `seed:${j.id}`, cm: Math.round(cm * 10) / 10, origin: "seed" as const }];
+        }),
+    })),
+  };
 }
 
 /** Jump-quality codes are a warning to retry; input and engine codes are a hard stop. */
@@ -82,18 +105,93 @@ function problemTitle(code: CoreErrorCode | null): string {
   }
 }
 
-export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; source: SourceInfo }) {
-  const { lesson, students, jumps } = payload;
+/** The camera, engine or clip failed: say why, retry the same input, or fall back to the seeded jumps. */
+function InputErrorState({
+  problem,
+  onRetry,
+  onUseSeeded,
+}: {
+  problem: InputProblem;
+  onRetry: () => void;
+  onUseSeeded: () => void;
+}) {
+  return (
+    <div role="alert" className="space-y-3 rounded-2xl bg-background p-4 text-sm">
+      <Badge variant={toneFor(problem.code)}>{problemTitle(problem.code)}</Badge>
+      <p>{problem.text}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={onRetry}>
+          <RotateCcw /> Try again
+        </Button>
+        <Button variant="soft" size="sm" onClick={onUseSeeded}>
+          <Rewind /> Use seeded jumps
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Before the first result: start the camera or replay the demo jump. */
+function ResultEmptyState({
+  text,
+  replayId,
+  showCamera,
+  onStartCamera,
+  onReplay,
+}: {
+  text: string;
+  replayId: string;
+  /** False while the camera is already starting or live. */
+  showCamera: boolean;
+  onStartCamera: () => void;
+  onReplay: () => void;
+}) {
+  return (
+    <Card className="space-y-4 p-6">
+      <p className="flex items-start gap-3 text-muted-foreground">
+        <span aria-hidden className="mt-1.5 size-2.5 shrink-0 rounded-full bg-sun" />
+        {text}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {showCamera && (
+          <Button onClick={onStartCamera}>
+            <Camera /> Start camera
+          </Button>
+        )}
+        {replayId && (
+          <Button variant="soft" onClick={onReplay}>
+            <Rewind /> Replay {replayId}
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+export function JumpLab({
+  lesson: payload,
+  source,
+  resetRequested = false,
+}: {
+  lesson: LessonPayload;
+  source: SourceInfo;
+  resetRequested?: boolean;
+}) {
+  const { lesson, jumps } = payload;
+  const router = useRouter();
   const defaultReplayId = jumps.find((j) => j.id === DEFAULT_REPLAY)?.id ?? jumps[0]?.id ?? "";
-  const defaultActiveId = students[0]?.id ?? null;
-  const studentName = (id: string) => students.find((s) => s.id === id)?.name ?? "Unknown";
+  const studentName = (id: string) => payload.students.find((s) => s.id === id)?.name ?? "Unknown";
+
+  const seed = useMemo(() => seedRoster(payload), [payload]);
+  const classStore = useClassStore(seed);
+  const { state: classState } = classStore;
+  const roster = classState.roster;
+  const activeId = classState.activeId;
 
   const [mode, setMode] = useState<Mode>(source.initialInput === "camera" ? "camera" : "replay");
   const [replayId, setReplayId] = useState(defaultReplayId);
-  const [roster, setRoster] = useState<RosterStudent[]>(() => seedRoster(payload));
-  const [activeId, setActiveId] = useState<string | null>(defaultActiveId);
-  const [storageReady, setStorageReady] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [savePending, setSavePending] = useState(false);
 
   const [cam, setCam] = useState<CamStatus>("idle");
   const [fileStatus, setFileStatus] = useState<FileStatus>("idle");
@@ -116,25 +214,16 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
   const frameCount = useRef(0);
   const wakeRef = useRef<{ release: () => Promise<void> } | null>(null);
 
-  // Class list persistence (localStorage, this laptop only).
+  // /play?reset=demo: back to the seeded demo class, then drop the query so a reload keeps the list.
+  const { reset: resetClass } = classStore;
+  const resetHandled = useRef(false);
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { roster: RosterStudent[]; activeId: string | null };
-        if (Array.isArray(parsed.roster)) {
-          setRoster(parsed.roster);
-          setActiveId(parsed.activeId);
-        }
-      }
-    } catch {
-      // A corrupt entry falls back to the demo class.
-    }
-    setStorageReady(true);
-  }, []);
-  useEffect(() => {
-    if (storageReady) window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ roster, activeId }));
-  }, [roster, activeId, storageReady]);
+    if (!resetRequested || resetHandled.current) return;
+    resetHandled.current = true;
+    resetClass();
+    setNotice("Demo class restored.");
+    router.replace("/play");
+  }, [resetRequested, resetClass, router]);
 
   const replay = useMemo(() => {
     const jump = jumps.find((j) => j.id === replayId) ?? jumps[0];
@@ -143,15 +232,17 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
     return { jump, samples, analysis: analyzeJump(samples) };
   }, [replayId, jumps]);
 
-  const current: { samples: PoseSample[]; analysis: JumpAnalysis; origin: Origin; label: string } | null =
+  const current: { key: string; samples: PoseSample[]; analysis: JumpAnalysis; origin: Origin; label: string } | null =
     mode === "replay"
       ? replay && {
+          key: `seed:${replay.jump.id}`,
           samples: replay.samples,
           analysis: replay.analysis,
           origin: "seed" as const,
           label: `Sample data: seeded clip ${replay.jump.id} of ${lesson.className}, not a live measurement.`,
         }
       : live && {
+          key: live.key,
           samples: live.samples,
           analysis: live.analysis,
           origin: live.origin,
@@ -161,6 +252,8 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
               : `Recorded clip: measured from ${live.fileName ?? "your clip"} in this browser.`,
         };
   const activeStudent = roster.find((s) => s.id === activeId) ?? null;
+  const resultKey = current?.key ?? null;
+  const isSaved = resultKey !== null && isDuplicateAttempt(classState, resultKey);
 
   const drawPose = useCallback((pose: FramePose) => {
     const canvas = canvasRef.current;
@@ -324,7 +417,9 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
     }
     runningRef.current = true;
     setCam("live");
-    const watcher = createJumpWatcher((samples, analysis) => setLive({ samples, analysis, origin: "camera" }));
+    const watcher = createJumpWatcher((samples, analysis) =>
+      setLive({ key: newResultKey(), samples, analysis, origin: "camera" })
+    );
     runLoop(engine, (s) => watcher.push(s));
   };
 
@@ -399,7 +494,13 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
         setProblem({ code: "parse_failure", text: hintFor("parse_failure") });
         return;
       }
-      setLive({ samples: trace.data, analysis: analyzeJump(trace.data), origin: "file", fileName: file.name });
+      setLive({
+        key: newResultKey(),
+        samples: trace.data,
+        analysis: analyzeJump(trace.data),
+        origin: "file",
+        fileName: file.name,
+      });
     };
     video.addEventListener("ended", onEnded, { once: true });
     fileCleanupRef.current = () => video.removeEventListener("ended", onEnded);
@@ -422,15 +523,43 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
     }
   };
 
+  /** Every save goes through the store; the outcome picks the sentence. */
   const saveAttempt = () => {
     const cm = current ? headlineCm(current.analysis) : null;
-    if (cm === null || !activeStudent) return;
-    if (activeStudent.attempts.length >= MAX_ATTEMPTS) {
-      setNotice(`${activeStudent.name} already has ${MAX_ATTEMPTS} attempts. Pick the next student.`);
-      return;
+    if (cm === null || !current || !activeStudent || savePending) return;
+    setSavePending(true);
+    try {
+      const outcome = classStore.save(activeStudent.id, { key: current.key, cm, origin: current.origin });
+      switch (outcome) {
+        case "duplicate":
+          setNotice("This jump is already in the class list.");
+          break;
+        case "full":
+          setNotice(`${activeStudent.name} already has ${MAX_ATTEMPTS} attempts. Pick the next student.`);
+          break;
+        case "no_student":
+          setNotice("Pick a student in the class list first.");
+          break;
+        case "saved":
+          setNotice(`Saved ${cm.toFixed(1)} cm as attempt ${activeStudent.attempts.length + 1} for ${activeStudent.name}.`);
+          break;
+      }
+    } finally {
+      setSavePending(false);
     }
-    setRoster((r) => r.map((s) => (s.id === activeStudent.id ? { ...s, attempts: [...s.attempts, Math.round(cm * 10) / 10] } : s)));
-    setNotice(`Saved ${cm.toFixed(1)} cm as attempt ${activeStudent.attempts.length + 1} for ${activeStudent.name}.`);
+  };
+
+  /** Re-runs the start function of the input that failed. */
+  const retryInput = () => {
+    setProblem(null);
+    if (mode === "file") pickClip();
+    else void startCamera();
+  };
+
+  const switchToSeeded = () => {
+    stopInput();
+    setProblem(null);
+    setMode("replay");
   };
 
   const a = current?.analysis ?? null;
@@ -591,34 +720,32 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
                 <span className="text-sm text-muted-foreground">{fileName}</span>
               )}
             </div>
-            {problem && (
-              <div className="space-y-3 rounded-2xl bg-background p-4 text-sm">
-                <Badge variant={toneFor(problem.code)}>{problemTitle(problem.code)}</Badge>
-                <p>{problem.text}</p>
-                <Button
-                  variant="soft"
-                  size="sm"
-                  onClick={() => {
-                    stopInput();
-                    setProblem(null);
-                    setMode("replay");
-                  }}
-                >
-                  Use a seeded jump instead
-                </Button>
-              </div>
-            )}
+            {problem && <InputErrorState problem={problem} onRetry={retryInput} onUseSeeded={switchToSeeded} />}
           </CardContent>
         </Card>
       )}
 
       <section aria-live="polite" className="space-y-4">
         {!current || !a ? (
-          <Card className="p-6 text-muted-foreground">
-            {mode === "file"
-              ? "No measured clip yet. When the clip finishes playing, the arc and the height appear here."
-              : "No jump yet. Once the camera sees you stand still and land a jump, the arc and the height appear here about a second after landing."}
-          </Card>
+          <ResultEmptyState
+            text={
+              mode === "file"
+                ? "No measured clip yet. When the clip finishes playing, the arc and the height appear here."
+                : "No jump yet. Once the camera sees you stand still and land a jump, the arc and the height appear here about a second after landing."
+            }
+            replayId={defaultReplayId}
+            showCamera={!(mode === "camera" && (cam === "live" || cam === "loading"))}
+            onStartCamera={() => {
+              setMode("camera");
+              void startCamera();
+            }}
+            onReplay={() => {
+              stopInput();
+              setProblem(null);
+              setReplayId(defaultReplayId);
+              setMode("replay");
+            }}
+          />
         ) : (
           <>
             <TrajectoryPlot samples={current.samples} analysis={a} layer={3} />
@@ -656,8 +783,13 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
                     </div>
                   </dl>
                   <div className="flex flex-wrap items-center gap-3">
-                    <Button variant="sun" onClick={saveAttempt} disabled={!activeStudent}>
-                      <Save /> Save to {activeStudent ? activeStudent.name : "a student"}
+                    <Button
+                      variant="sun"
+                      onClick={saveAttempt}
+                      disabled={!activeStudent || savePending || isSaved}
+                      aria-busy={savePending}
+                    >
+                      <Save /> {isSaved ? "Saved" : `Save to ${activeStudent ? activeStudent.name : "a student"}`}
                     </Button>
                     {notice && <span className="text-sm">{notice}</span>}
                   </div>
@@ -679,17 +811,12 @@ export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; so
         roster={roster}
         activeId={activeId}
         onSelect={(id) => {
-          setActiveId(id);
+          classStore.select(id);
           setNotice(null);
         }}
-        onAddStudent={(name) => {
-          const id = `s-${Date.now().toString(36)}`;
-          setRoster((r) => [...r, { id, name, attempts: [] }]);
-          setActiveId(id);
-        }}
+        onAddStudent={(name) => classStore.addStudent(name)}
         onReset={() => {
-          setRoster(seedRoster(payload));
-          setActiveId(defaultActiveId);
+          classStore.reset();
           setNotice(null);
         }}
       />
