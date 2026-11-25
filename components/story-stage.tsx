@@ -19,6 +19,7 @@ const CHAPTERS = [
 ] as const;
 
 const DEFAULT_JUMP_ID = "j-02";
+const HEADING = "saltara-wipe-scroll mt-4 text-2xl font-bold sm:text-3xl";
 
 /** Minutes between the first and last recorded jump of the lesson. */
 function lessonMinutes(recordedAt: string[]): number {
@@ -125,36 +126,34 @@ export function StoryStage({ lesson: payload, classScene }: { lesson: LessonPayl
       </figure>
 
       <div className="space-y-2">
-        <section id="stand" className="min-h-[55vh] scroll-mt-[50vh] py-10">
-          <h2 className="saltara-wipe-scroll text-3xl font-bold">Stand still for half a second</h2>
+        <section id="stand" className="min-h-[40vh] scroll-mt-[50vh] py-10">
+          <div aria-hidden className="saltara-rule-line saltara-rule-scroll" />
+          <h2 className={HEADING}>Stand still for half a second</h2>
           <p className="mt-4 text-lg leading-relaxed">
-            {first} faces the laptop from about two metres away. For the first 0.5 seconds of the clip Saltara only
-            watches: the hip settles at {Math.round(a.standingHipY)} px from the top of a 720 px frame and the ankles at{" "}
-            {Math.round(a.standingAnkleY)} px. That is the whole calibration. Nobody types a height, tapes a marker to
-            the wall or holds up a ruler.
+            {first} stands about two metres from the laptop for 0.5 seconds while Saltara records the hip at{" "}
+            {Math.round(a.standingHipY)} px and the ankles at {Math.round(a.standingAnkleY)} px of a 720 px frame, which
+            is the whole calibration.
           </p>
         </section>
 
-        <section id="leave" className="min-h-[55vh] py-10">
-          <h2 className="saltara-wipe-scroll text-3xl font-bold">Leave the ground</h2>
+        <section id="leave" className="min-h-[40vh] py-10">
+          <div aria-hidden className="saltara-rule-line saltara-rule-scroll" />
+          <h2 className={HEADING}>Leave the ground</h2>
           <p className="mt-4 text-lg leading-relaxed">
-            The ankles lift clear of the standing line on frame {a.takeoffIndex} and come back {a.airborneFrames} frames
-            later. At {Math.round(a.fps)} fps that is {Math.round((a.airborneFrames / a.fps) * 1000)} ms in the air, and
-            counting frames alone already says {est ? f1(est.frameCountCm) : "nothing usable"} cm. But a {Math.round(a.fps)}{" "}
-            fps webcam can only place take-off and landing to within {Math.round(1000 / a.fps)} ms, so frame counting
-            wobbles by several centimetres from one attempt to the next. The purple points are the frames Saltara trusts
-            as airborne.
+            The ankles leave the standing line on frame {a.takeoffIndex} and return {a.airborneFrames} purple frames
+            later, {Math.round((a.airborneFrames / a.fps) * 1000)} ms at {Math.round(a.fps)} fps, so counting frames alone
+            says {est ? f1(est.frameCountCm) : "nothing usable"} cm, give or take the {Math.round(1000 / a.fps)} ms one
+            webcam frame can hide.
           </p>
         </section>
 
-        <section id="ruler" className="min-h-[55vh] py-10">
-          <h2 className="saltara-wipe-scroll text-3xl font-bold">Gravity is the ruler</h2>
+        <section id="ruler" className="min-h-[40vh] py-10">
+          <div aria-hidden className="saltara-rule-line saltara-rule-scroll" />
+          <h2 className={HEADING}>Gravity is the ruler</h2>
           <p className="mt-4 text-lg leading-relaxed">
-            Everything in the air falls at 9.81 m/s². Saltara fits y = at² + bt + c through the {a.airborneFrames} purple
-            points{a.fit ? ` (R² ${a.fit.r2.toFixed(3)})` : ""}. The curvature a has to equal half of g, so the fit
-            hands back the scale for free: {a.pxPerMetre ? Math.round(a.pxPerMetre) : "no"} pixels per metre at{" "}
-            {`${first}'s`} distance from the camera. Move the laptop, change the zoom, use a different webcam: the next jump
-            measures its own scale again.
+            Everything in the air falls at 9.81 m/s², so the parabola fitted through the {a.airborneFrames} purple points
+            {a.fit ? ` (R² ${a.fit.r2.toFixed(3)})` : ""} hands back the scale for free:{" "}
+            {a.pxPerMetre ? Math.round(a.pxPerMetre) : "no"} pixels per metre at {`${first}'s`} distance from the camera.
           </p>
           <div className="mt-8 rounded-3xl bg-card p-6">
             <p className="text-base">
@@ -166,28 +165,28 @@ export function StoryStage({ lesson: payload, classScene }: { lesson: LessonPayl
           </div>
         </section>
 
-        <section id="three" className="min-h-[55vh] py-10">
-          <h2 className="saltara-wipe-scroll text-3xl font-bold">Three answers, side by side</h2>
+        <section id="three" className="min-h-[40vh] py-10">
+          <div aria-hidden className="saltara-rule-line saltara-rule-scroll" />
+          <h2 className={HEADING}>Three answers, side by side</h2>
           {est ? (
             <p className="mt-4 text-lg leading-relaxed">
-              Counting frames says {f1(est.frameCountCm)} cm. The roots of the parabola fall between frames and give a
-              flight time that says {f1(est.flightTimeCm)} cm; this is the number Saltara reports. The rise from the
-              standing hip to the apex, converted with the gravity scale, says {f1(est.displacementCm)} cm. That last one
-              includes the heel raise before toe-off, the same thing a chalk mark on the wall captures, so it should sit a
-              few centimetres higher. When the first two disagree by more than 3 cm, the attempt is worth repeating.
+              Counting frames says {f1(est.frameCountCm)} cm, the parabola&apos;s own flight time says{" "}
+              {f1(est.flightTimeCm)} cm (the number Saltara reports), and standing hip to apex says{" "}
+              {f1(est.displacementCm)} cm, a little higher because it includes the heel raise a chalk mark also catches;
+              when the first two disagree by more than 3 cm, repeat the attempt.
             </p>
           ) : (
             <p className="mt-4 text-lg leading-relaxed">This attempt was rejected: {a.reason}</p>
           )}
         </section>
 
-        <section id="class" className="min-h-[55vh] py-10">
-          <h2 className="saltara-wipe-scroll text-3xl font-bold">The whole class in one lesson</h2>
+        <section id="class" className="min-h-[40vh] py-10">
+          <div aria-hidden className="saltara-rule-line saltara-rule-scroll" />
+          <h2 className={HEADING}>The whole class in one lesson</h2>
           <p className="mt-4 text-lg leading-relaxed">
-            Throw the deck to flip through {lesson.className}: {runs.length} seeded jumps from {students.length}{" "}
-            students, recorded in about {lessonMinutes(jumps.map((j) => j.recordedAt))} minutes on {lesson.date}. Best of the lesson so far is {studentName(best.jump.studentId)} at{" "}
-            {f1(headlineCm(best.analysis) ?? 0)} cm. A class of 30 with three attempts each fits inside one 40 minute PE
-            period, and the table downloads as a CSV at the end.
+            Throw the deck to flip through {lesson.className}: {runs.length} seeded jumps from {students.length} students
+            in about {lessonMinutes(jumps.map((j) => j.recordedAt))} minutes on {lesson.date}, with{" "}
+            {studentName(best.jump.studentId)} on top at {f1(headlineCm(best.analysis) ?? 0)} cm.
           </p>
           <div className="mt-6 overflow-hidden rounded-3xl">{classScene}</div>
           <p className="mt-6 text-lg">
