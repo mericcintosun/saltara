@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { useRouter } from "next/navigation";
 import { Camera, CameraOff, Film, RotateCcw, Rewind, Save, Square } from "lucide-react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
+import { ArcReveal, DROP_STAGGER_MS } from "@/components/arc-reveal";
 import { ClassRoster } from "@/components/class-roster";
-import { TrajectoryPlot } from "@/components/trajectory-plot";
+import { HeightFigure } from "@/components/height-figure";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -253,6 +254,11 @@ export function JumpLab({
         };
   const activeStudent = roster.find((s) => s.id === activeId) ?? null;
   const resultKey = current?.key ?? null;
+  // The result shown at page load sits still; every result that arrives later plays the reveal.
+  const firstResultKey = useRef(resultKey);
+  const revealArmed = useRef(false);
+  if (resultKey !== firstResultKey.current) revealArmed.current = true;
+  const animateReveal = resultKey !== null && revealArmed.current;
   const isSaved = resultKey !== null && isDuplicateAttempt(classState, resultKey);
 
   const drawPose = useCallback((pose: FramePose) => {
@@ -645,7 +651,7 @@ export function JumpLab({
             {jumps.length === 0 && (
               <p className="flex w-full items-center gap-3 rounded-2xl bg-background p-4 text-sm text-muted-foreground">
                 <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
-                No recorded jumps in this lesson yet. Turn on the camera and jump.
+                Recorded jumps from this lesson appear here once it has some; until then, measure one with the live camera.
               </p>
             )}
             {jumps.map((j) => (
@@ -717,7 +723,9 @@ export function JumpLab({
               )}
               {running && hint && <Badge variant="warn">{hint}</Badge>}
               {mode === "file" && fileName && fileStatus !== "idle" && (
-                <span className="text-sm text-muted-foreground">{fileName}</span>
+                <span className="min-w-0 max-w-full truncate text-sm text-muted-foreground" title={fileName}>
+                  {fileName}
+                </span>
               )}
             </div>
             {problem && <InputErrorState problem={problem} onRetry={retryInput} onUseSeeded={switchToSeeded} />}
@@ -730,8 +738,8 @@ export function JumpLab({
           <ResultEmptyState
             text={
               mode === "file"
-                ? "No measured clip yet. When the clip finishes playing, the arc and the height appear here."
-                : "No jump yet. Once the camera sees you stand still and land a jump, the arc and the height appear here about a second after landing."
+                ? "The arc and the height appear here when the loaded clip finishes playing."
+                : "The arc and the height appear here about a second after the camera sees you stand still, jump and land."
             }
             replayId={defaultReplayId}
             showCamera={!(mode === "camera" && (cam === "live" || cam === "loading"))}
@@ -748,13 +756,23 @@ export function JumpLab({
           />
         ) : (
           <>
-            <TrajectoryPlot samples={current.samples} analysis={a} layer={3} />
+            <ArcReveal
+              samples={current.samples}
+              analysis={a}
+              revealKey={current.key}
+              animateOnMount={animateReveal}
+            />
             {a.ok && est ? (
               <Card className="saltara-wipe">
                 <CardContent className="space-y-4 pt-6">
                   <div>
-                    <p className="font-display text-6xl font-extrabold">{est.flightTimeCm.toFixed(0)} cm</p>
-                    <p className="mt-1 text-sm font-bold" data-origin={current.origin}>
+                    <HeightFigure
+                      cm={est.flightTimeCm}
+                      revealKey={current.key}
+                      animateOnMount={animateReveal}
+                      delayMs={a.airborneFrames * DROP_STAGGER_MS + 600}
+                    />
+                    <p className="mt-1 break-words text-sm font-bold" data-origin={current.origin} title={current.label}>
                       {current.label}
                     </p>
                     <p className="text-sm text-muted-foreground">
@@ -799,7 +817,9 @@ export function JumpLab({
               <Card className="space-y-2 p-6">
                 <Badge variant={toneFor(a.code)}>{problemTitle(a.code)}</Badge>
                 <p className={toneFor(a.code) === "bad" ? "text-bad" : "text-warn"}>{a.reason}</p>
-                <p className="text-sm text-muted-foreground">{current.label}</p>
+                <p className="break-words text-sm text-muted-foreground" title={current.label}>
+                  {current.label}
+                </p>
               </Card>
             )}
           </>

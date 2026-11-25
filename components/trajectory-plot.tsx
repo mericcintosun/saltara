@@ -1,6 +1,55 @@
 import type { JumpAnalysis, PoseSample } from "@/lib/jump-solver";
 import { cn } from "@/lib/utils";
 
+export type PlotGeometry = {
+  W: number;
+  H: number;
+  pad: { l: number; r: number; t: number; b: number };
+  px: (t: number) => number;
+  py: (y: number) => number;
+  /** SVG path of the fitted parabola between its roots, or "" without a fit. */
+  arc: string;
+  baseY: number;
+  apex: { t: number; y: number } | null;
+  /** Sample indices from takeoffIndex to landingIndex - 1 (empty without a take-off). */
+  airborne: number[];
+};
+
+/** Pure plot geometry shared by the static plot and the animated reveal. */
+export function plotGeometry(samples: PoseSample[], analysis: JumpAnalysis): PlotGeometry {
+  const W = 600;
+  const H = 280;
+  const pad = { l: 16, r: 16, t: 24, b: 30 };
+  const t0 = samples[0]?.t ?? 0;
+  const t1 = samples[samples.length - 1]?.t ?? 1;
+  const span = t1 - t0 || 1;
+  const ys = samples.map((s) => s.hipY);
+  const yMin = Math.min(...ys, analysis.apex?.y ?? Infinity) - 14;
+  const yMax = Math.max(...ys) + 14;
+  const px = (t: number) => pad.l + ((t - t0) / span) * (W - pad.l - pad.r);
+  const py = (y: number) => pad.t + ((y - yMin) / (yMax - yMin)) * (H - pad.t - pad.b);
+
+  let arc = "";
+  if (analysis.fit && analysis.roots) {
+    const { a, b, c, t0: ft0 } = analysis.fit;
+    const [r1, r2] = analysis.roots;
+    const steps = 48;
+    for (let k = 0; k <= steps; k++) {
+      const t = r1 + ((r2 - r1) * k) / steps;
+      const x = t - ft0;
+      arc += `${k === 0 ? "M" : "L"}${px(t).toFixed(1)},${py(a * x * x + b * x + c).toFixed(1)} `;
+    }
+  }
+
+  const airborne: number[] = [];
+  if (analysis.takeoffIndex >= 0) {
+    const end = Math.min(analysis.landingIndex, samples.length);
+    for (let i = analysis.takeoffIndex; i < end; i++) airborne.push(i);
+  }
+
+  return { W, H, pad, px, py, arc, baseY: py(analysis.standingHipY), apex: analysis.apex, airborne };
+}
+
 /**
  * Hip height over time for one jump. `layer` reveals the method step by step:
  * 0 raw trace, 1 airborne frames, 2 fitted parabola and gravity scale,
@@ -17,40 +66,16 @@ export function TrajectoryPlot({
   layer?: 0 | 1 | 2 | 3;
   className?: string;
 }) {
-  const W = 600;
-  const H = 280;
-  const pad = { l: 16, r: 16, t: 24, b: 30 };
   if (samples.length < 2) {
     return (
       <div className={cn("flex aspect-[600/280] items-center justify-center rounded-2xl bg-card text-sm text-muted-foreground", className)}>
-        Waiting for the first frames.
+        The hip trace appears here once the first frames arrive.
       </div>
     );
   }
-  const t0 = samples[0].t;
-  const t1 = samples[samples.length - 1].t;
-  const ys = samples.map((s) => s.hipY);
-  const yMin = Math.min(...ys, analysis.apex?.y ?? Infinity) - 14;
-  const yMax = Math.max(...ys) + 14;
-  const px = (t: number) => pad.l + ((t - t0) / (t1 - t0)) * (W - pad.l - pad.r);
-  const py = (y: number) => pad.t + ((y - yMin) / (yMax - yMin)) * (H - pad.t - pad.b);
+  const { W, H, pad, px, py, arc, baseY, apex } = plotGeometry(samples, analysis);
 
   const isAir = (i: number) => analysis.takeoffIndex >= 0 && i >= analysis.takeoffIndex && i < analysis.landingIndex;
-
-  let arc = "";
-  if (analysis.fit && analysis.roots) {
-    const { a, b, c, t0: ft0 } = analysis.fit;
-    const [r1, r2] = analysis.roots;
-    const steps = 48;
-    for (let k = 0; k <= steps; k++) {
-      const t = r1 + ((r2 - r1) * k) / steps;
-      const x = t - ft0;
-      arc += `${k === 0 ? "M" : "L"}${px(t).toFixed(1)},${py(a * x * x + b * x + c).toFixed(1)} `;
-    }
-  }
-
-  const baseY = py(analysis.standingHipY);
-  const apex = analysis.apex;
 
   return (
     <div className="overflow-x-auto rounded-2xl">
