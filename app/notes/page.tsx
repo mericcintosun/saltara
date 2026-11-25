@@ -3,11 +3,11 @@ import Link from "next/link";
 import { BlandAltmanPlot } from "@/components/bland-altman-plot";
 import { SceneSlot } from "@/components/scene-slot";
 import { Badge } from "@/components/ui/badge";
-import { pilotIsPlaceholder, pilotRows } from "@/lib/data";
+import { getAdapter } from "@/lib/adapter";
 import { blandAltman, G } from "@/lib/jump-solver";
 
 export const metadata: Metadata = {
-  title: "Notes | Saltara",
+  title: "Notes",
   description: "Method, formulas, quality gates, the wall-mark pilot and the tech behind Saltara.",
 };
 
@@ -23,7 +23,9 @@ function Fold({ summary, children }: { summary: string; children: React.ReactNod
   );
 }
 
-export default function NotesPage() {
+export default async function NotesPage() {
+  const { rows: pilotRows, placeholder: pilotIsPlaceholder } = await getAdapter().getPilot();
+  const hasRows = pilotRows.length > 0;
   const disp = blandAltman(pilotRows.map((r) => ({ reference: r.wallCm, test: r.displacementCm })));
   const flight = blandAltman(pilotRows.map((r) => ({ reference: r.wallCm, test: r.flightTimeCm })));
   const frames = blandAltman(pilotRows.map((r) => ({ reference: r.wallCm, test: r.frameCountCm })));
@@ -71,24 +73,34 @@ export default function NotesPage() {
 
       <section className="mt-14 space-y-4">
         <h2 className="text-2xl font-bold">Agreement with a chalk wall mark</h2>
-        {pilotIsPlaceholder && (
+        {hasRows && pilotIsPlaceholder && (
           <p className="rounded-2xl bg-secondary p-4 text-sm">
             <Badge variant="warn" className="mr-2">
               Placeholder data
             </Badge>
-            The 22 rows below are illustrative values shaped like the planned pilot, not measurements. They will be
-            replaced by our own session: 2 jumpers, at least 20 jumps, chalk jump-and-reach and tape against the three
-            Saltara estimates.
+            The {pilotRows.length} rows below are illustrative values shaped like the planned pilot, not measurements.
+            They will be replaced by our own session: 2 jumpers, at least 20 jumps, chalk jump-and-reach and tape
+            against the three Saltara estimates.
           </p>
         )}
-        <BlandAltmanPlot stats={disp} label="Bland-Altman plot of standing-to-apex height against the wall mark" />
-        <p className="leading-relaxed">
-          On these rows the standing-to-apex height sits {f1(disp.bias)} cm from the wall mark on average, with 95% of
-          jumps between {f1(disp.lower)} and {f1(disp.upper)} cm. The parabola flight time reads {f1(Math.abs(flight.bias))} cm
-          lower than the wall (limits {f1(flight.lower)} to {f1(flight.upper)}), and frame counting {f1(Math.abs(frames.bias))} cm
-          lower with wider limits ({f1(frames.lower)} to {f1(frames.upper)}). Flight-time methods are expected to read
-          lower than a reach test, because the reach includes arm swing and heel raise.
-        </p>
+        {hasRows ? (
+          <>
+            <BlandAltmanPlot stats={disp} label="Bland-Altman plot of standing-to-apex height against the wall mark" />
+            <p className="leading-relaxed">
+              On these rows the standing-to-apex height sits {f1(disp.bias)} cm from the wall mark on average, with 95%
+              of jumps between {f1(disp.lower)} and {f1(disp.upper)} cm. The parabola flight time reads{" "}
+              {f1(Math.abs(flight.bias))} cm lower than the wall (limits {f1(flight.lower)} to {f1(flight.upper)}), and
+              frame counting {f1(Math.abs(frames.bias))} cm lower with wider limits ({f1(frames.lower)} to{" "}
+              {f1(frames.upper)}). Flight-time methods are expected to read lower than a reach test, because the reach
+              includes arm swing and heel raise.
+            </p>
+          </>
+        ) : (
+          <p className="flex items-center gap-3 rounded-2xl bg-card p-5 leading-relaxed">
+            <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
+            No pilot jumps recorded yet. The agreement plot appears here once the first wall-mark session is in.
+          </p>
+        )}
         <div className="overflow-hidden rounded-3xl">
           <SceneSlot
             n={3}

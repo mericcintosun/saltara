@@ -5,8 +5,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { JumpDeck, type DeckItem } from "@/components/jump-deck";
 import { TrajectoryPlot } from "@/components/trajectory-plot";
-import { lesson, seedJumps, studentName, traceFor } from "@/lib/data";
+import { traceFor } from "@/lib/data/trace";
 import { analyzeJump, headlineCm } from "@/lib/jump-solver";
+import type { LessonPayload } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const CHAPTERS = [
@@ -17,22 +18,31 @@ const CHAPTERS = [
   { id: "class", label: "Class", layer: 3 },
 ] as const;
 
-const DEFAULT_JUMP = seedJumps.findIndex((j) => j.id === "j-02");
+const DEFAULT_JUMP_ID = "j-02";
+
+/** Minutes between the first and last recorded jump of the lesson. */
+function lessonMinutes(recordedAt: string[]): number {
+  const times = recordedAt.map((s) => new Date(s).getTime()).filter((t) => Number.isFinite(t));
+  if (times.length < 2) return 0;
+  return Math.round((Math.max(...times) - Math.min(...times)) / 60000);
+}
 
 /**
- * The home story. One live figure (trajectory + throwable deck of class 9B's
+ * The home story. One live figure (trajectory + throwable deck of the lesson's
  * jumps) stays pinned while five chapters scroll past and change what it shows.
  */
-export function StoryStage({ classScene }: { classScene: React.ReactNode }) {
+export function StoryStage({ lesson: payload, classScene }: { lesson: LessonPayload; classScene: React.ReactNode }) {
+  const { lesson, students, jumps } = payload;
+  const studentName = (id: string) => students.find((s) => s.id === id)?.name ?? "Unknown";
   const runs = useMemo(
     () =>
-      seedJumps.map((j) => {
+      jumps.map((j) => {
         const samples = traceFor(j);
         return { jump: j, samples, analysis: analyzeJump(samples) };
       }),
-    []
+    [jumps]
   );
-  const [index, setIndex] = useState(DEFAULT_JUMP);
+  const [index, setIndex] = useState(() => Math.max(0, jumps.findIndex((j) => j.id === DEFAULT_JUMP_ID)));
   const [active, setActive] = useState(0);
 
   useEffect(() => {
@@ -57,7 +67,20 @@ export function StoryStage({ classScene }: { classScene: React.ReactNode }) {
     document.getElementById(CHAPTERS[i].id)?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
   };
 
-  const run = runs[index];
+  const run = runs[index] ?? runs[0];
+  if (!run) {
+    return (
+      <div className="flex items-center gap-3 rounded-3xl bg-card p-6 text-lg leading-relaxed">
+        <span aria-hidden className="size-3 shrink-0 rounded-full bg-sun" />
+        <p>
+          No recorded jumps in this lesson yet. Turn on the camera and jump.{" "}
+          <Link href="/play" className="font-bold text-primary underline decoration-sun decoration-2 underline-offset-4">
+            Open the jump lab
+          </Link>
+        </p>
+      </div>
+    );
+  }
   const a = run.analysis;
   const name = studentName(run.jump.studentId);
   const first = name.split(" ")[0];
@@ -157,8 +180,8 @@ export function StoryStage({ classScene }: { classScene: React.ReactNode }) {
         <section id="class" className="min-h-[55vh] py-10">
           <h2 className="saltara-wipe-scroll text-3xl font-bold">The whole class in one lesson</h2>
           <p className="mt-4 text-lg leading-relaxed">
-            Throw the deck to flip through {lesson.className}: {runs.length} jumps from 6 students, recorded in about
-            13 minutes on {lesson.date}. Best of the lesson so far is {studentName(best.jump.studentId)} at{" "}
+            Throw the deck to flip through {lesson.className}: {runs.length} seeded jumps from {students.length}{" "}
+            students, recorded in about {lessonMinutes(jumps.map((j) => j.recordedAt))} minutes on {lesson.date}. Best of the lesson so far is {studentName(best.jump.studentId)} at{" "}
             {f1(headlineCm(best.analysis) ?? 0)} cm. A class of 30 with three attempts each fits inside one 40 minute PE
             period, and the table downloads as a CSV at the end.
           </p>

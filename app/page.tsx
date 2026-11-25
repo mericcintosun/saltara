@@ -1,8 +1,18 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SceneSlot } from "@/components/scene-slot";
 import { StoryStage } from "@/components/story-stage";
+import { getAdapter } from "@/lib/adapter";
 
-export default function Home() {
+export const metadata: Metadata = {
+  title: "Story",
+  description: "Five chapters walk one recorded jump through the gravity ruler, from standing still to a class list.",
+};
+
+export default async function Home() {
+  const payload = await getAdapter().getLesson();
+  const { lesson, jumps } = payload;
+
   return (
     <article className="mx-auto max-w-prose px-5 pt-12">
       <header className="saltara-wipe">
@@ -31,14 +41,16 @@ export default function Home() {
           So in most PE lessons the jump gets a chalk mark on the wall, or it does not get measured at all.
         </p>
         <p>
-          Saltara needs only the webcam that is already on the teacher&apos;s laptop. Below is a demo lesson: twelve
-          jumps from class 9B, each rebuilt frame by frame at webcam frame rates with landmark jitter, and the real
-          solver runs on every one of them in your browser. Scroll, and the figure follows the method one step at a time.
+          Saltara needs only the webcam that is already on the teacher&apos;s laptop. Below is a seeded demo lesson:{" "}
+          {jumps.length} jumps from {lesson.className}, each rebuilt frame by frame at webcam frame rates with landmark
+          jitter, and the real solver runs on every one of them in your browser. Scroll, and the figure follows the
+          method one step at a time.
         </p>
       </div>
 
       <div className="mt-8">
         <StoryStage
+          lesson={payload}
           classScene={
             <SceneSlot
               n={2}

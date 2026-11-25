@@ -8,9 +8,10 @@ import { TrajectoryPlot } from "@/components/trajectory-plot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { lesson, seedJumps, studentName, students, traceFor } from "@/lib/data";
+import { traceFor } from "@/lib/data/trace";
 import { analyzeJump, createJumpWatcher, headlineCm, type JumpAnalysis, type PoseSample } from "@/lib/jump-solver";
 import { loadPoseLandmarker, readPose, SKELETON_EDGES, LANDMARK, type FramePose } from "@/lib/pose-tracker";
+import type { LessonPayload } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Mode = "camera" | "replay";
@@ -20,11 +21,14 @@ type WakeLockNav = { wakeLock: { request: (type: "screen") => Promise<{ release:
 
 const STORAGE_KEY = "saltara.class.v1";
 
-function seedRoster(): RosterStudent[] {
-  return students.map((s) => ({
+const DEFAULT_REPLAY = "j-02";
+
+/** The seeded class list: every student of the lesson with their recorded attempts. */
+function seedRoster(payload: LessonPayload): RosterStudent[] {
+  return payload.students.map((s) => ({
     id: s.id,
     name: s.name,
-    attempts: seedJumps
+    attempts: payload.jumps
       .filter((j) => j.studentId === s.id)
       .map((j) => headlineCm(analyzeJump(traceFor(j))))
       .filter((v): v is number => v !== null)
@@ -32,11 +36,16 @@ function seedRoster(): RosterStudent[] {
   }));
 }
 
-export function JumpLab() {
+export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
+  const { lesson, students, jumps } = payload;
+  const defaultReplayId = jumps.find((j) => j.id === DEFAULT_REPLAY)?.id ?? jumps[0]?.id ?? "";
+  const defaultActiveId = students[0]?.id ?? null;
+  const studentName = (id: string) => students.find((s) => s.id === id)?.name ?? "Unknown";
+
   const [mode, setMode] = useState<Mode>("replay");
-  const [replayId, setReplayId] = useState("j-02");
-  const [roster, setRoster] = useState<RosterStudent[]>(seedRoster);
-  const [activeId, setActiveId] = useState<string | null>("s-elif");
+  const [replayId, setReplayId] = useState(defaultReplayId);
+  const [roster, setRoster] = useState<RosterStudent[]>(() => seedRoster(payload));
+  const [activeId, setActiveId] = useState<string | null>(defaultActiveId);
   const [storageReady, setStorageReady] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -77,10 +86,11 @@ export function JumpLab() {
   }, [roster, activeId, storageReady]);
 
   const replay = useMemo(() => {
-    const jump = seedJumps.find((j) => j.id === replayId) ?? seedJumps[0];
+    const jump = jumps.find((j) => j.id === replayId) ?? jumps[0];
+    if (!jump) return null;
     const samples = traceFor(jump);
     return { jump, samples, analysis: analyzeJump(samples) };
-  }, [replayId]);
+  }, [replayId, jumps]);
 
   const current = mode === "replay" ? replay : live;
   const activeStudent = roster.find((s) => s.id === activeId) ?? null;
@@ -293,11 +303,18 @@ export function JumpLab() {
           <CardHeader>
             <CardTitle>Recorded jumps from {lesson.className}</CardTitle>
             <CardDescription>
-              Demo clips rebuilt frame by frame with webcam jitter. The same solver as the live camera runs on each one.
+              Seeded demo clips rebuilt frame by frame with webcam jitter. The same solver as the live camera runs on
+              each one.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            {seedJumps.map((j) => (
+            {jumps.length === 0 && (
+              <p className="flex w-full items-center gap-3 rounded-2xl bg-background p-4 text-sm text-muted-foreground">
+                <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
+                No recorded jumps in this lesson yet. Turn on the camera and jump.
+              </p>
+            )}
+            {jumps.map((j) => (
               <Button
                 key={j.id}
                 size="sm"
@@ -378,8 +395,8 @@ export function JumpLab() {
           setActiveId(id);
         }}
         onReset={() => {
-          setRoster(seedRoster());
-          setActiveId("s-elif");
+          setRoster(seedRoster(payload));
+          setActiveId(defaultActiveId);
           setNotice(null);
         }}
       />
