@@ -66,7 +66,15 @@ export type ApiResponse<T> = {
   data: T;
 };
 
+/** Where /play starts and the sentence that tells the reader which engine serves it. */
+export interface SourceInfo {
+  mode: AdapterMode;
+  initialInput: "replay" | "camera";
+  label: string;
+}
+
 export interface SaltaraAdapter {
   getLesson(): Promise<LessonPayload>;
   getPilot(): Promise<PilotPayload>;
+  describeSource(): Promise<SourceInfo>;
 }
