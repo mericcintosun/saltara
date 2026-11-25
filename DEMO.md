@@ -21,4 +21,4 @@
 
 ## Seeded vs live
 
-The twelve jumps of class 9B are seeded: they live in `fixtures/lesson-9b.json` and reach the pages through `lib/data/seed.ts` and `lib/adapter.ts` (`ADAPTER_MODE=fake`). `traceFor()` rebuilds each one frame by frame with a fixed PRNG, and the real solver runs on it. The pilot rows in `fixtures/pilot-placeholder.json` are placeholders and are labelled as such on `/notes`. Live camera jumps (step 2 and the live path of step 3) run in the browser and are never seeded.
+The twelve jumps of class 9B are seeded: they live in `fixtures/lesson-9b.json` and reach the pages through `lib/data/seed.ts` and `lib/adapter.ts` (`ADAPTER_MODE=fake`). `traceFor()` rebuilds each one frame by frame with a fixed PRNG, and the real solver runs on it. The pilot rows in `fixtures/pilot-placeholder.json` are placeholders and are labelled as such on `/notes`. Live camera jumps (step 2 and the live path of step 3) run in the browser and are never seeded. Saved attempts carry a source tag (seeded, camera or clip) in the class list and the CSV, and `/play?reset=demo` restores the start state.

@@ -8,7 +8,9 @@ export const metadata: Metadata = {
   description: "Measure a vertical jump with your webcam or a recorded clip, or replay the demo class, and keep a class list with CSV export.",
 };
 
-export default async function PlayPage() {
+// Reading searchParams makes /play dynamic, so ADAPTER_MODE is read per request, not frozen at build time.
+export default async function PlayPage({ searchParams }: { searchParams: Promise<{ reset?: string }> }) {
+  const { reset } = await searchParams;
   const adapter = getAdapter();
   const [payload, source] = await Promise.all([adapter.getLesson(), adapter.describeSource()]);
 
@@ -26,7 +28,7 @@ export default async function PlayPage() {
         </Badge>
       </p>
       <div className="mt-10">
-        <JumpLab lesson={payload} source={source} />
+        <JumpLab lesson={payload} source={source} resetRequested={reset === "demo"} />
       </div>
     </div>
   );

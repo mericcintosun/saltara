@@ -55,8 +55,9 @@ All three are linked from the sticky header (`components/site-header.tsx`).
 - `components/trajectory-plot.tsx`: SVG hip trajectory with layers 0 to 3 (trace, airborne points, fitted arc + scale, height bracket).
 - `components/jump-deck.tsx`: kit signature 1, throwable deck (react-spring + use-gesture).
 - `components/story-stage.tsx`: the pinned figure, chapter indicator (IntersectionObserver picks the active chapter, buttons jump to one), chapter copy with live numbers.
-- `components/jump-lab.tsx`: camera start/stop, `requestVideoFrameCallback` loop with rAF fallback, skeleton overlay, fps readout, Wake Lock, replay mode, saving attempts, localStorage persistence (`saltara.class.v1`).
-- `components/class-roster.tsx`: class mode, add student, 3 attempts, best highlighted, CSV export, restore demo class.
+- `components/jump-lab.tsx`: camera start/stop, `requestVideoFrameCallback` loop with rAF fallback, skeleton overlay, fps readout, Wake Lock, replay mode, guarded save (`savePending`, `isSaved`), `InputErrorState` and `ResultEmptyState`, `/play?reset=demo` handling. Class data comes only from `useClassStore`.
+- `lib/store.ts` (Phase 3): the class store. Types, `ClassStateSchema`, `addAttempt`/`isDuplicateAttempt`, and the only `localStorage` calls in the repo (key `saltara.class.v2:<SEED_VERSION>`). `lib/use-class-store.ts` is the hook over it.
+- `components/class-roster.tsx`: class mode, add student, 3 attempts with a "seeded" tag on seeded ones, best highlighted, CSV export with a source column per attempt, `RosterEmptyState`.
 - `components/bland-altman-plot.tsx`: server-rendered SVG agreement plot.
 - `components/ui/*`: shadcn primitives restyled for D12 orchard (rounded-full buttons, rounded-3xl tinted cards, sun-dot badge).
 - `app/globals.css`: tokens from IDENTITY.md only, `saltara-wipe` keyframes (M4), reduced-motion block.
@@ -64,8 +65,8 @@ All three are linked from the sticky header (`components/site-header.tsx`).
 
 ### Real vs mocked
 
-- Real: pose tracking, frame timestamps, solver, three estimates, gates, class list, CSV, Wake Lock.
-- Seeded: the 12 demo jumps (`fixtures/lesson-9b.json`, traced by `lib/data/trace.ts`) and the pilot rows (`fixtures/pilot-placeholder.json`). The pilot rows MUST be replaced by real measurements before submission (set `placeholder` to false). `realAdapter` is a stub that serves the same seed.
+- Real: pose tracking, frame timestamps, solver, three estimates, gates, class list (browser localStorage through `lib/store.ts`, source-tagged, double-save guarded), CSV with source columns, Wake Lock.
+- Seeded: the 12 demo jumps (`fixtures/lesson-9b.json`, traced by `lib/data/trace.ts`), which also fill the starting class list as attempts tagged "seeded". Pilot rows: `fixtures/pilot-placeholder.json` (22 PLACEHOLDER rows, labelled). The real slot `fixtures/pilot.json` is empty; `realAdapter.getPilot` serves it once it holds 20 or more rows and falls back to the placeholder until then. It MUST be filled by a human session before submission.
 - Untested on real footage: `createJumpWatcher` thresholds (4 percent of leg length, 0.35 s settle) and the rigid-body take-off level in `analyzeJump` (see the TODO about toe landmarks 31 and 32).
 
 ### Interaction kit (K4 spring)
@@ -214,3 +215,64 @@ None, the agent cannot run commands. (One stray shell call was made by mistake: 
 ### Next best step
 
 Mission 3, the animated wow moment, built on real live jumps: after a live jump the airborne hip points drop onto the plot one by one, the parabola wipes in over them, and kit signature 2 (spring overshoot on the cm figure) lands the number above "scale from gravity: N px/m".
+
+## Phase 3 log
+
+### Goal
+
+DEMO.md step 4 (three names, three attempts each, two seeded and one live or from a clip, best marked, CSV) runs on the real flow through one guarded class store, and steps 2 to 6 each have a reachable fallback. The `/notes` pilot reads a real slot when it holds data.
+
+### Status
+
+All five slices are written, and none was cut. They are unverified: the agent cannot run commands. The runner checks `npm run build` (strict TypeScript), `npm test` (including `tests/store.test.ts`, 9 cases), the commit replay from `.farm-commits.json`, and the Vercel redeploy. The human checks three `npm run demo:reset` then `/play?reset=demo` cycles, the double-click save, the denied-camera retry, and the CSV columns.
+
+Per DEMO step, the real path and its fallback:
+
+| Step | Real path | Fallback (same file) |
+| --- | --- | --- |
+| 1 `/` | `getAdapter()` returns `withFallback(realAdapter, fakeAdapter)` in real mode (`lib/adapter.ts`) | the fake method's result after a `[core] fallback` line; `StoryEmptyState` when there are no jumps |
+| 2, 3 `/play` | camera or clip (`components/jump-lab.tsx`) | `InputErrorState`: "Try again" re-runs `startCamera` or `pickClip`, and "Use seeded jumps" switches to replay |
+| 4 `/play` | `useClassStore` over `readClassState` (`lib/store.ts`) | the seed, when `parseStored` returns null (missing, corrupt, other seed version, v1 shape) |
+| 5 `/notes` | `fixtures/pilot.json` via `realPilotRows` (`lib/adapters/real.ts`) | `placeholderPilotFallback()` (22 labelled placeholder rows) |
+| 6 `/play` | the last result stays in React state (`live` or `replayId`) | the replay of j-02 |
+
+### Decisions
+
+- **Store table.**
+  - Chosen: "none" for the lesson and pilot reads (seed constants through the adapter), plus the browser's localStorage for the class list. It is client side, needs no secret, and keeps the `/notes` promise ("no server, no account... no video leaves the device"). `.env.example` and `.farm-live.json` are unchanged, so no new env key exists.
+  - Rejected: the Upstash KV row and the Postgres row. Each adds a server and a secret the builder cannot provide, and each breaks that promise.
+  - Not applicable: the on-chain row. There is no `contracts/`, so the chain part of the reset is a no-op.
+  - Also not needed: a schema push. There is no database.
+- **Key format.** `saltara.class.v2:<SEED_VERSION>`. The legacy `saltara.class.v1` is removed on every read. `clearClassState()` removes every `saltara.class.*` key.
+- **Attempt keys.** A seeded attempt is `seed:<jump id>`. A camera or clip result gets one key when its `Measured` object is created (`crypto.randomUUID()`, with a time plus random fallback where randomUUID is missing). Replaying a seeded jump that is already in the list therefore shows "Saved" and cannot be added twice.
+- **SEED_VERSION.** FNV-1a 32-bit over the UTF-16 code units of `JSON.stringify(lessonFixture)`, as 8 hex digits, exported from `lib/data/seed.ts`. `scripts/demo-reset.mjs` copies the same function. Editing the lesson fixture discards stale lists.
+- **CSV columns.** `class, student, attempt_1_cm, attempt_1_source, attempt_2_cm, attempt_2_source, attempt_3_cm, attempt_3_source, best_cm, method`. The source values are `seeded`, `camera` and `clip`.
+- **The double-save guard is real, not only visual.** `save()` reads the latest state from a ref that is updated synchronously, so a second click in the same frame gets `duplicate`. `savePending` is set around a synchronous call, so it rarely renders; the button's `isSaved` takes over after the first save.
+- **`/play` is now dynamic.** It awaits `searchParams`, so `ADAPTER_MODE` is read per request. This resolves the Phase 2 open question.
+- The reset effect in `JumpLab` runs after the hook's hydrate effect (declaration order), calls `reset()` once (guarded by a ref for StrictMode), shows "Demo class restored." and calls `router.replace("/play")`.
+- `analyzeJump(samples, { quiet: true })` silences every `[core]` line for the seeded class list. `/` still solves its deck without `quiet`, as the spec scoped `quiet` to `seedRoster`.
+- `next/image` SVG sources pass `unoptimized`, because the optimizer does not resize vector files. Uploaded PNGs go through it.
+- **Commit grouping.** In `.farm-commits.json` each file sits in the first slice whose code needs it. `components/jump-lab.tsx`, `lib/jump-solver.ts` and `fixtures/pilot.json` are in the slice 1 entry because jump-lab imports `quiet` and `SEED_VERSION` there, so the slice 2 entry holds only the test file.
+
+### Failed attempts
+
+None.
+
+### Files changed
+
+lib/store.ts (new), lib/use-class-store.ts (new), tests/store.test.ts (new), fixtures/pilot.json (new), scripts/demo-reset.mjs (new), app/play/error.tsx (new), app/notes/error.tsx (new), lib/data/seed.ts, lib/jump-solver.ts, lib/adapter.ts, lib/adapters/real.ts, lib/types.ts, app/api/lesson/route.ts, app/api/pilot/route.ts, scripts/seed.mjs, components/jump-lab.tsx, components/class-roster.tsx, components/story-stage.tsx, components/scene-slot.tsx, components/brand-mark.tsx, app/loading.tsx, app/play/loading.tsx, app/notes/loading.tsx, app/error.tsx, app/notes/page.tsx, app/play/page.tsx, package.json, README.md, DEMO.md, CLAUDE.md, HANDOFF.md, .farm-commits.json.
+
+### Commands run
+
+None, the agent cannot run commands.
+
+### Open questions
+
+- The real pilot is only read in `ADAPTER_MODE=real`. Fake mode keeps the placeholder even when `fixtures/pilot.json` is full. Should fake mode also prefer real rows?
+- `app/play/error.tsx` uses the required sentence as body copy under an h2 with the same words. The frontend phase may want a shorter heading.
+- Stale `saltara.class.v2:<old version>` keys from earlier fixtures stay in the browser until "Restore demo class" or `?reset=demo` clears them. They are small and never read.
+- `next/image` with an uploaded `public/brand/*.png` goes through the Vercel image optimizer. This is fine on the free tier for two images, but confirm it if usage limits matter.
+
+### Next best step
+
+First, a human pilot session fills `fixtures/pilot.json` (20 or more rows, `p-NN`), then runs `npm run seed`. After that comes Mission 3: the wow animation and kit signature 2 (spring overshoot on the cm figure).

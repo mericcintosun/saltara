@@ -49,7 +49,7 @@ npm run dev
 ```
 
 ```bash
-npm test         # Vitest: solver cases (synthetic parabola, seeded j-02, too few frames, jitter, drift) and schemas
+npm test         # Vitest: solver cases (synthetic parabola, seeded j-02, too few frames, jitter, drift), schemas and the class store
 npm run proof    # solves the 12 seeded jumps, runs the tests, checks the engine URLs, rewrites the Proof section below
 ```
 
@@ -60,6 +60,15 @@ Routes:
 - `/` the story: five chapters that walk one recorded jump through the method
 - `/play` the jump lab: live camera, recorded clip, the twelve demo jumps, class list and CSV export
 - `/notes` method, formulas, quality gates, the wall-mark pilot and its Bland-Altman plot
+
+## Data and reset
+
+- The lesson and the pilot rows are read only: fixtures served through `lib/adapter.ts`, no database. The one thing a teacher changes, the class list, lives in this browser's `localStorage` through `lib/store.ts`. No server and no secret are involved, and no video or name leaves the laptop.
+- The class list is stored under `saltara.class.v2:<seed version>`, where the seed version is an FNV-1a hash of `fixtures/lesson-9b.json`. Editing the fixture discards stale lists. Every saved attempt carries its source (seeded, camera or clip) in the list and in the CSV, and the same jump cannot be saved twice.
+- Reset is two steps: `npm run demo:reset` validates the fixtures and prints the seed version, then open `/play?reset=demo` in the browser to restore the demo class.
+- There is no schema to push and no migration script, because there is no database.
+- There is no on-chain state and no contract to redeploy.
+- `fixtures/pilot.json` is the slot for the real wall-mark session (rows shaped like the placeholder, ids `p-NN`). With 20 or more rows and `ADAPTER_MODE=real`, `/notes` shows them instead of the labelled placeholder.
 
 ## Demo
 
@@ -76,26 +85,26 @@ Sample data: the 12 seeded jumps of Year 9 PE, class 9B (synthetic traces rebuil
 
 | id | true rise cm | headline cm | error cm | true px/m | gravity px/m | ms |
 | --- | --- | --- | --- | --- | --- | --- |
-| j-01 | 31.8 | 32.0 | 0.2 | 410 | 407 | 1.73 |
-| j-02 | 33.9 | 33.6 | -0.3 | 412 | 416 | 0.62 |
+| j-01 | 31.8 | 32.0 | 0.2 | 410 | 407 | 1.54 |
+| j-02 | 33.9 | 33.6 | -0.3 | 412 | 416 | 0.43 |
 | j-03 | 27.6 | 27.5 | -0.1 | 388 | 391 | 0.17 |
-| j-04 | 29.1 | 28.9 | -0.2 | 391 | 396 | 0.13 |
-| j-05 | 39.2 | 38.8 | -0.4 | 436 | 440 | 0.55 |
-| j-06 | 37.1 | 37.1 | -0.0 | 433 | 433 | 0.13 |
-| j-07 | 24.4 | 25.6 | 1.2 | 402 | 378 | 0.11 |
-| j-08 | 26.2 | 27.2 | 1.0 | 405 | 389 | 0.10 |
-| j-09 | 30.1 | 30.7 | 0.6 | 421 | 413 | 0.15 |
-| j-10 | 28.9 | 29.6 | 0.7 | 418 | 409 | 0.13 |
-| j-11 | 35.2 | 34.9 | -0.3 | 377 | 382 | 0.13 |
-| j-12 | 36.8 | 36.1 | -0.7 | 380 | 386 | 0.56 |
+| j-04 | 29.1 | 28.9 | -0.2 | 391 | 396 | 0.20 |
+| j-05 | 39.2 | 38.8 | -0.4 | 436 | 440 | 0.44 |
+| j-06 | 37.1 | 37.1 | -0.0 | 433 | 433 | 0.14 |
+| j-07 | 24.4 | 25.6 | 1.2 | 402 | 378 | 0.08 |
+| j-08 | 26.2 | 27.2 | 1.0 | 405 | 389 | 0.07 |
+| j-09 | 30.1 | 30.7 | 0.6 | 421 | 413 | 0.09 |
+| j-10 | 28.9 | 29.6 | 0.7 | 418 | 409 | 0.08 |
+| j-11 | 35.2 | 34.9 | -0.3 | 377 | 382 | 0.07 |
+| j-12 | 36.8 | 36.1 | -0.7 | 380 | 386 | 0.07 |
 
-Mean absolute error: 0.48 cm over 12 solved jumps (0 rejected). Median solver latency: 0.14 ms.
+Mean absolute error: 0.48 cm over 12 solved jumps (0 rejected). Median solver latency: 0.12 ms.
 <!-- PROOF:END solver -->
 
 ### Tests
 
 <!-- PROOF:BEGIN tests -->
-`npx vitest run` on `tests/`: 8 passed, 0 failed, 8 total.
+`npx vitest run` on `tests/`: 17 passed, 0 failed, 17 total.
 <!-- PROOF:END tests -->
 
 ### Engine files
@@ -105,8 +114,8 @@ HEAD requests from the proof run to the URLs in `lib/pose-tracker.ts`:
 
 | url | status | ms |
 | --- | --- | --- |
-| https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm | 404 | 180 |
-| https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task | 200 | 171 |
+| https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm | 404 | 142 |
+| https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task | 200 | 202 |
 <!-- PROOF:END engine -->
 
 ## Honest status

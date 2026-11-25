@@ -8,6 +8,8 @@ Read `IDENTITY.md` first (it overrides taste), then `HANDOFF.md` and `DEMO.md`.
 - `npm run dev` (http://localhost:3000, camera needs HTTPS or localhost)
 - `npm run build`
 - `npm run seed` (validates and normalises `fixtures/*.json`, idempotent)
+- `npm test` (Vitest: solver and class store)
+- `npm run demo:reset` (seed, then prints the seed version; then open `/play?reset=demo`)
 
 ## Data path
 
