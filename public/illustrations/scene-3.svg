@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560">
+  <rect width="960" height="560" fill="#f7f9f1"/>
+  <rect x="40" y="40" width="440" height="480" rx="40" fill="#edf2e2"/>
+  <rect x="120" y="60" width="36" height="440" rx="10" fill="#e8b73a"/>
+  <g stroke="#22301c" stroke-width="4" stroke-linecap="round">
+    <line x1="120" y1="100" x2="140" y2="100"/>
+    <line x1="120" y1="140" x2="134" y2="140"/>
+    <line x1="120" y1="180" x2="140" y2="180"/>
+    <line x1="120" y1="220" x2="134" y2="220"/>
+    <line x1="120" y1="260" x2="140" y2="260"/>
+    <line x1="120" y1="300" x2="134" y2="300"/>
+    <line x1="120" y1="340" x2="140" y2="340"/>
+    <line x1="120" y1="380" x2="134" y2="380"/>
+    <line x1="120" y1="420" x2="140" y2="420"/>
+  </g>
+  <rect x="190" y="146" width="120" height="14" rx="7" fill="#f7f9f1"/>
+  <rect x="190" y="206" width="90" height="14" rx="7" fill="#f7f9f1"/>
+  <circle cx="330" cy="153" r="10" fill="#7c3aa3"/>
+  <path d="M360 330 C380 290 430 290 440 330 C410 350 380 350 360 330 Z" fill="#cfdbbb"/>
+  <rect x="520" y="120" width="400" height="260" rx="28" fill="#22301c"/>
+  <rect x="540" y="140" width="360" height="220" rx="16" fill="#f7f9f1"/>
+  <line x1="560" y1="250" x2="880" y2="250" stroke="#7c3aa3" stroke-width="4"/>
+  <line x1="560" y1="190" x2="880" y2="190" stroke="#cfdbbb" stroke-width="3" stroke-dasharray="8 10"/>
+  <line x1="560" y1="310" x2="880" y2="310" stroke="#cfdbbb" stroke-width="3" stroke-dasharray="8 10"/>
+  <g fill="#7c3aa3">
+    <circle cx="590" cy="262" r="7"/>
+    <circle cx="620" cy="236" r="7"/>
+    <circle cx="650" cy="270" r="7"/>
+    <circle cx="680" cy="244" r="7"/>
+    <circle cx="710" cy="226" r="7"/>
+    <circle cx="740" cy="258" r="7"/>
+    <circle cx="770" cy="282" r="7"/>
+    <circle cx="800" cy="240" r="7"/>
+    <circle cx="830" cy="264" r="7"/>
+    <circle cx="860" cy="232" r="7"/>
+  </g>
+  <circle cx="720" cy="226" r="0" fill="#e8b73a"/>
+  <rect x="490" y="378" width="460" height="20" rx="10" fill="#22301c"/>
+  <circle cx="880" cy="460" r="34" fill="#e8b73a"/>
+  <rect x="0" y="520" width="960" height="40" fill="#e1ead1"/>
+</svg>
