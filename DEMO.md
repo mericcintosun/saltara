@@ -12,7 +12,7 @@
 
 ## Steps
 
-1. `/` (`app/page.tsx`): the story headline and the five chapters walk one recorded jump through the method. Throw the deck once.
+1. `/` (`app/page.tsx`, `components/hero-arc.tsx`): the first screen shows the seeded j-02 arc; move the pointer (or the arrow keys) over it and the sun dot slides along the fitted parabola while the sentence below reads the hip height in cm. Then the five chapters walk the same jump through the method. Throw the deck once.
 2. `/play` (`app/play/page.tsx`): Start camera shows the mirrored video, plum skeleton, sun-yellow hip dot and fps badge.
 3. `/play` (`app/play/page.tsx`): replay j-02, jump live, or load a recorded clip. A line under the result says which source produced it. The trajectory plot shows the fitted arc, the cm result, "scale from gravity" in px/m, and the three estimates side by side.
 4. `/play` (`components/arc-reveal.tsx`, `components/height-figure.tsx`): After a live jump, a clip, or a seeded jump picked from the deck, the airborne hip points drop onto the plot one by one, the parabola wipes in over them, and the cm figure springs past its value and settles, with scale from gravity in px/m underneath. With reduced motion the result appears in place.
