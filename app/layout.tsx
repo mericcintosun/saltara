@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Atkinson_Hyperlegible, Syne } from "next/font/google";
+import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -18,6 +19,15 @@ const atkinson = Atkinson_Hyperlegible({
 
 const SITE_URL = "https://saltara.vercel.app";
 const SOURCE_URL = "https://github.com/mericcintosun/saltara";
+const SECURITY_URL = `${SOURCE_URL}/blob/main/SECURITY.md`;
+const FOOTER_LINK =
+  "inline-flex min-h-11 items-center font-bold text-primary underline decoration-sun decoration-2 underline-offset-4";
+const FOOTER_LINKS = [
+  { label: "Source code", href: SOURCE_URL, external: true },
+  { label: "PhysTech 2027 on Devpost", href: "https://phystech2027.devpost.com/", external: true },
+  { label: "Security", href: SECURITY_URL, external: true },
+  { label: "Notes", href: "/notes", external: false },
+];
 const TITLE = "Saltara: gravity measures your vertical jump";
 const DESCRIPTION =
   "Force plates cost a fortune, so most PE classes skip the jump test. Saltara measures jump height from a laptop webcam, using gravity as the ruler.";
@@ -37,31 +47,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SiteHeader />
         <main>{children}</main>
         <footer className="mt-24 border-t border-border">
-          <div className="mx-auto flex max-w-prose flex-col gap-2 px-5 py-10 text-sm text-muted-foreground">
-            <p>
-              Saltara runs entirely in your browser. Video frames never leave the laptop; only the hip and ankle
-              heights are kept, and only on this device.
+          <div className="mx-auto max-w-prose px-5 py-10 text-sm text-muted-foreground">
+            <p className="flex items-start gap-3 leading-relaxed">
+              <span aria-hidden className="mt-1.5 size-2.5 shrink-0 rounded-full bg-sun" />
+              <span>
+                Runs in your browser: video stays on this laptop, the class list stays in this browser, there is no
+                wallet and no account, and the pose model loads from cdn.jsdelivr.net and storage.googleapis.com.
+              </span>
             </p>
-            <p>Built for PhysTech 2027: Physical Activity and Technology Hack Day.</p>
-            <section aria-labelledby="about-security" className="mt-4 rounded-3xl bg-card p-5">
-              <h2 id="about-security" className="flex items-center gap-2 text-base font-bold text-foreground">
-                <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
-                About and security
-              </h2>
-              <ul className="mt-3 space-y-1.5">
-                <li>No wallet, no account, no contract.</li>
-                <li>Video frames stay on this laptop; the class list is kept only in this browser.</li>
-                <li>The pose model files download from cdn.jsdelivr.net and storage.googleapis.com.</li>
-              </ul>
-              <a
-                href={SOURCE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex min-h-11 items-center font-bold text-primary underline decoration-sun decoration-2 underline-offset-4"
-              >
-                Source code
-              </a>
-            </section>
+            <ul className="mt-3 flex flex-wrap gap-x-5 pl-5">
+              {FOOTER_LINKS.map((l) => (
+                <li key={l.label}>
+                  {l.external ? (
+                    <a href={l.href} target="_blank" rel="noopener noreferrer" className={FOOTER_LINK}>
+                      {l.label}
+                    </a>
+                  ) : (
+                    <Link href={l.href} className={FOOTER_LINK}>
+                      {l.label}
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         </footer>
       </body>

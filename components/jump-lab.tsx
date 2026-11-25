@@ -7,9 +7,11 @@ import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import { ArcReveal, DROP_STAGGER_MS } from "@/components/arc-reveal";
 import { ClassRoster } from "@/components/class-roster";
 import { HeightFigure } from "@/components/height-figure";
+import { SceneSlot } from "@/components/scene-slot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { FILE_PLAYBACK_RATE, MAX_CLIP_MB, MAX_CLIP_SECONDS } from "@/lib/config";
 import { SEED_VERSION } from "@/lib/data/seed";
 import { traceFor } from "@/lib/data/trace";
@@ -149,7 +151,15 @@ function ResultEmptyState({
 }) {
   return (
     <Card className="space-y-4 p-6">
-      <p className="flex items-start gap-3 text-muted-foreground">
+      <div className="mx-auto max-w-xs overflow-hidden rounded-3xl sm:max-w-sm">
+        <SceneSlot
+          n={5}
+          alt="A dotted arc of hip positions rising and falling over a pale green field with one sun-yellow dot at the top"
+          width={640}
+          height={600}
+        />
+      </div>
+      <p className="flex items-start gap-3 leading-relaxed text-muted-foreground">
         <span aria-hidden className="mt-1.5 size-2.5 shrink-0 rounded-full bg-sun" />
         {text}
       </p>
@@ -589,7 +599,18 @@ export function JumpLab({
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Input">
+      <div className="space-y-4">
+      {!running && cam !== "loading" && (
+        <div className="overflow-hidden rounded-3xl">
+          <SceneSlot
+            n={4}
+            alt="A strip of empty classroom wall with a sun-yellow floor mark two metres in front of a laptop on a stool"
+            width={960}
+            height={360}
+          />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Input source">
         <Button
           variant={mode === "camera" ? "default" : "soft"}
           aria-pressed={mode === "camera"}
@@ -627,7 +648,7 @@ export function JumpLab({
         >
           <Rewind /> Seeded jumps
         </Button>
-        <input
+        <Input
           ref={fileInputRef}
           type="file"
           accept="video/*"
@@ -636,6 +657,7 @@ export function JumpLab({
           aria-hidden
           onChange={onClipPicked}
         />
+      </div>
       </div>
 
       {mode === "replay" ? (

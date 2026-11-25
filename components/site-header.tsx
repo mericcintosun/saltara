@@ -45,16 +45,17 @@ export function SiteHeader() {
             );
           })}
         </nav>
-        <button
+        <Button
           type="button"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+          variant="ghost" size="icon"
+          className="md:hidden [&_svg]:size-5"
           aria-label="Menu"
           aria-expanded={open}
           aria-controls={MENU_ID}
           onClick={() => setOpen((o) => !o)}
         >
-          {open ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
-        </button>
+          {open ? <X aria-hidden /> : <Menu aria-hidden />}
+        </Button>
       </div>
       <nav
         id={MENU_ID}
