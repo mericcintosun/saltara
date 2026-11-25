@@ -6,10 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "seed": "node -e \"console.log('seed: nothing to do yet')\""
+    "seed": "node -e \"console.log('seed: nothing to do yet, seed jumps live in lib/data.ts')\""
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.21",
     "@radix-ui/react-slot": "^1.1.2",
+    "@react-spring/web": "^10.1.2",
+    "@use-gesture/react": "^10.3.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.474.0",
