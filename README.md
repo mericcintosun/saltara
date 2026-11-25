@@ -91,18 +91,18 @@ Sample data: the 12 seeded jumps of Year 9 PE, class 9B (synthetic traces rebuil
 
 | id | true rise cm | headline cm | error cm | true px/m | gravity px/m | ms |
 | --- | --- | --- | --- | --- | --- | --- |
-| j-01 | 31.8 | 32.0 | 0.2 | 410 | 407 | 3.95 |
-| j-02 | 33.9 | 33.6 | -0.3 | 412 | 416 | 0.31 |
-| j-03 | 27.6 | 27.5 | -0.1 | 388 | 391 | 0.15 |
-| j-04 | 29.1 | 28.9 | -0.2 | 391 | 396 | 0.12 |
-| j-05 | 39.2 | 38.8 | -0.4 | 436 | 440 | 0.32 |
-| j-06 | 37.1 | 37.1 | -0.0 | 433 | 433 | 0.12 |
-| j-07 | 24.4 | 25.6 | 1.2 | 402 | 378 | 0.08 |
-| j-08 | 26.2 | 27.2 | 1.0 | 405 | 389 | 0.10 |
+| j-01 | 31.8 | 32.0 | 0.2 | 410 | 407 | 1.45 |
+| j-02 | 33.9 | 33.6 | -0.3 | 412 | 416 | 0.42 |
+| j-03 | 27.6 | 27.5 | -0.1 | 388 | 391 | 0.20 |
+| j-04 | 29.1 | 28.9 | -0.2 | 391 | 396 | 0.17 |
+| j-05 | 39.2 | 38.8 | -0.4 | 436 | 440 | 0.43 |
+| j-06 | 37.1 | 37.1 | -0.0 | 433 | 433 | 4.90 |
+| j-07 | 24.4 | 25.6 | 1.2 | 402 | 378 | 0.06 |
+| j-08 | 26.2 | 27.2 | 1.0 | 405 | 389 | 0.05 |
 | j-09 | 30.1 | 30.7 | 0.6 | 421 | 413 | 0.05 |
 | j-10 | 28.9 | 29.6 | 0.7 | 418 | 409 | 0.04 |
-| j-11 | 35.2 | 34.9 | -0.3 | 377 | 382 | 1.01 |
-| j-12 | 36.8 | 36.1 | -0.7 | 380 | 386 | 0.07 |
+| j-11 | 35.2 | 34.9 | -0.3 | 377 | 382 | 0.04 |
+| j-12 | 36.8 | 36.1 | -0.7 | 380 | 386 | 0.04 |
 
 Mean absolute error: 0.48 cm over 12 solved jumps (0 rejected). Median solver latency: 0.12 ms.
 <!-- PROOF:END solver -->
@@ -120,9 +120,9 @@ HEAD requests from the proof run to the URLs in `lib/pose-tracker.ts`:
 
 | url | status | ms |
 | --- | --- | --- |
-| https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm/vision_wasm_internal.js | 200 | 111 |
+| https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm/vision_wasm_internal.js | 200 | 126 |
 | https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm/vision_wasm_internal.wasm | 200 | 59 |
-| https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task | 200 | 190 |
+| https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task | 200 | 153 |
 <!-- PROOF:END engine -->
 
 ## Honest status
