@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export default function HomeErrorState({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <div className="mx-auto max-w-prose px-5 py-24">
-      <div className="space-y-4 rounded-3xl bg-card p-8 text-center">
+      <Card role="alert" className="space-y-4 p-8 text-center">
         <span aria-hidden className="mx-auto block size-3 rounded-full bg-sun" />
         <h2 className="text-2xl font-bold">Saltara tripped on this page</h2>
         <p className="leading-relaxed text-muted-foreground">
@@ -18,7 +19,7 @@ export default function HomeErrorState({ reset }: { error: Error & { digest?: st
             <Link href="/">Back to the story</Link>
           </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -60,10 +60,9 @@ export default async function NotesPage() {
       <section className="mt-12 space-y-4">
         <h2 className="text-2xl font-bold">The gravity ruler</h2>
         <p className="leading-relaxed">
-          In the air, the hip follows a parabola in image pixels: y = at² + bt + c, fitted by least squares to the
-          airborne frames using the real frame timestamps from requestVideoFrameCallback. Gravity fixes the curvature,
-          a = (g/2) × s, so the scale s = 2a / g pixels per metre comes out of the fit with g = {G} m/s². No cone, no
-          ruler, no typed body height.
+          In the air the hip draws y = at² + bt + c in image pixels, and gravity fixes the curvature at a = (g/2) × s,
+          so the scale s = 2a / g pixels per metre falls out of the fit with g = {G} m/s² and no cone, ruler or typed
+          height.
         </p>
         <Fold summary="Three heights from one fit">
           <p>
@@ -105,12 +104,45 @@ export default async function NotesPage() {
             <BlandAltmanPlot stats={disp} label="Bland-Altman plot of standing-to-apex height against the wall mark" />
             <p className="leading-relaxed">
               On these rows the standing-to-apex height sits {f1(disp.bias)} cm from the wall mark on average, with 95%
-              of jumps between {f1(disp.lower)} and {f1(disp.upper)} cm. The parabola flight time reads{" "}
-              {f1(Math.abs(flight.bias))} cm lower than the wall (limits {f1(flight.lower)} to {f1(flight.upper)}), and
-              frame counting {f1(Math.abs(frames.bias))} cm lower with wider limits ({f1(frames.lower)} to{" "}
-              {f1(frames.upper)}). Flight-time methods are expected to read lower than a reach test, because the reach
-              includes arm swing and heel raise.
+              of jumps between {f1(disp.lower)} and {f1(disp.upper)} cm.
             </p>
+            <Fold summary="The other two estimates against the wall mark">
+              <div className="overflow-x-auto rounded-2xl">
+                <table className="w-full min-w-[20rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="py-2 pr-4">Estimate</th>
+                      <th className="py-2 pr-4">Bias cm</th>
+                      <th className="py-2">95% limits cm</th>
+                    </tr>
+                  </thead>
+                  <tbody className="tabular-nums">
+                    <tr className="border-b border-border">
+                      <td className="py-2 pr-4">Standing hip to apex</td>
+                      <td className="py-2 pr-4">{f1(disp.bias)}</td>
+                      <td className="py-2">
+                        {f1(disp.lower)} to {f1(disp.upper)}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-border">
+                      <td className="py-2 pr-4">Parabola flight time</td>
+                      <td className="py-2 pr-4">{f1(flight.bias)}</td>
+                      <td className="py-2">
+                        {f1(flight.lower)} to {f1(flight.upper)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4">Frame counting</td>
+                      <td className="py-2 pr-4">{f1(frames.bias)}</td>
+                      <td className="py-2">
+                        {f1(frames.lower)} to {f1(frames.upper)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>Flight-time methods are expected to read lower than a reach test, because the reach includes arm swing and heel raise.</p>
+            </Fold>
           </>
         ) : (
           <PilotEmptyState />
@@ -128,11 +160,13 @@ export default async function NotesPage() {
       <section className="mt-14 space-y-4">
         <h2 className="text-2xl font-bold">What it runs on</h2>
         <p className="leading-relaxed">
-          MediaPipe Pose Landmarker (lite model, VIDEO mode) tracks 33 body points in the browser through WebAssembly.
-          requestVideoFrameCallback gives each frame its true presentation time, so dropped frames do not bend the
-          fit. The Screen Wake Lock API keeps the laptop awake through a lesson, and the class list lives in
-          localStorage. There is no server, no account and no API key, and no video leaves the device.
+          MediaPipe Pose Landmarker (lite, VIDEO mode) tracks 33 body points in the browser through WebAssembly, with
+          no server, no account, no API key and no video leaving the device.
         </p>
+        <Fold summary="Browser APIs behind the measurement">
+          <p>requestVideoFrameCallback gives each frame its true presentation time, so dropped frames do not bend the fit.</p>
+          <p>The Screen Wake Lock API keeps the laptop awake through a lesson, and the class list lives in localStorage.</p>
+        </Fold>
         <Fold summary="How this differs from existing jump apps">
           <p>
             <strong>My Jump 2</strong> is the most studied phone app. It needs slow-motion video and a person who picks
