@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "seed": "node -e \"console.log('seed: nothing to do yet, seed jumps live in lib/data.ts')\""
+    "seed": "node scripts/seed.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.21",
