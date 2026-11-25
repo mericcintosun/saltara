@@ -276,3 +276,71 @@ None, the agent cannot run commands.
 ### Next best step
 
 First, a human pilot session fills `fixtures/pilot.json` (20 or more rows, `p-NN`), then runs `npm run seed`. After that comes Mission 3: the wow animation and kit signature 2 (spring overshoot on the cm figure).
+
+## Phase 4 log
+
+### Goal
+
+Ship the Mission 3 wow on `/play` (hip points drop, the parabola wipes in, the cm figure springs past its value and settles) as DEMO step 4, make every route usable on a phone (mobile menu, 44px controls, no page-level horizontal scroll), add share metadata and the landing line, then run the web security sweep (footer disclosure, SECURITY.md).
+
+### Status
+
+Every slice is written and none was cut. Nothing was built, tested or deployed by the agent.
+
+| Slice | Status |
+| --- | --- |
+| A1 prize table and DELIVERY.md | done: `README.md` "Prize categories we enter", `DELIVERY.md` (4 sections plus "Before submitting") |
+| A2 second wow | done: `plotGeometry` in `components/trajectory-plot.tsx`, `components/arc-reveal.tsx`, `components/height-figure.tsx` (kit signature 2), wired in `components/jump-lab.tsx`, DEMO.md renumbered 1 to 7, `tests/plot-geometry.test.ts`, IDENTITY.md amendment |
+| A3 responsive | done: mobile disclosure menu, `sm` buttons at `h-11`, long strings truncated or wrapped with `title`, Fold summaries `min-h-11`, chapter buttons on one scrolling row below sm |
+| A4 polish | done: metadata with openGraph and twitter, real WASM file probes in `scripts/proof.mts`, one-sentence empty states, landing paragraph with `#stand` and `/play` links |
+| B1 sec(web) | done: greps below, footer "About and security" block in `app/layout.tsx` |
+| B2 SECURITY.md | done |
+
+### Bounties and seats
+
+No sponsor-bounty rows; integration work skipped, 0 of the 4 hour bounty cap used. No seat was added: no chain, no auth, localStorage stays the storage, no model provider. `.env.example` and `.farm-live.json` (`{ "requiredEnv": [], "optionalEnv": [] }`) are unchanged.
+
+### Security sweep (B1)
+
+- Contract front skipped: no contracts/ directory and no on-chain state.
+- Wallet front, verified vacuously. Grep `eth_requestAccounts|personal_sign|eth_sign|connect\(|window\.ethereum|wagmi|viem` over `app`, `components`, `lib`: one hit, `components/story-stage.tsx:77` `observer.disconnect()` (an IntersectionObserver, not a wallet). Zero wallet hits. Blockaid: no wallet code means no wallet warning is expected.
+- Secrets: grep `sk-|PRIVATE_KEY|[0-9a-fA-F]{64}|NEXT_PUBLIC_` over `app`, `components`, `lib`: one hit, `lib/brand-files.ts:2` `NEXT_PUBLIC_BRAND_FILES` (public file names). No key-like strings.
+- Links: grep `target="_blank"`: one hit, the new footer "Source code" link in `app/layout.tsx`, which carries `rel="noopener noreferrer"`. Grep `http://`: one hit, `app/icon.svg:1` (the SVG XML namespace).
+- Forms: the only form is in `components/class-roster.tsx`; it calls `onAddStudent`, which `components/jump-lab.tsx` routes to `classStore.addStudent` (`lib/use-class-store.ts` over `lib/store.ts`). The only `localStorage` calls in the repo are in `lib/store.ts`. `/api/lesson` and `/api/pilot` export only an argument-less `GET()`, so they take no user input.
+- Third parties: the footer names cdn.jsdelivr.net and storage.googleapis.com.
+- Nothing beyond the footer needed changing.
+
+### Decisions
+
+- **`plotGeometry` split.** The geometry (`W`, `H`, `pad`, `px`, `py`, `arc`, `baseY`, `apex`, `airborne`) moved out of `TrajectoryPlot` into an exported pure function. `TrajectoryPlot` keeps its props and markup, still has no `"use client"` and no kit import, and `components/story-stage.tsx` still uses it unchanged.
+- **When the reveal plays.** The spec says to animate only when `revealKey` changes after mount. On `/play` the result section swaps from `ResultEmptyState` to the plot when the first live jump lands, so `ArcReveal` and `HeightFigure` mount fresh for that jump and a pure "key changed after mount" rule would never animate the first live jump (the actual wow). Both components therefore take an optional `animateOnMount`. `JumpLab` sets it once the shown result key differs from the key at page load (the j-02 replay in fake mode, nothing in real mode). The server HTML and the first client render still show every point, the arc and the real cm in place.
+- **Order of the three beats.** Points drop with `delay: i * 45` (`DROP_STAGGER_MS`, a spring prop), the arc `<g key={revealKey} className="saltara-wipe">` mounts when the last spring rests (plus a timer fallback in case `onRest` never fires), and `HeightFigure` starts its spring from 0 after `airborneFrames * 45 + 600` ms (`delayMs`), so the number lands after the arc. The `saltara-wipe` class is only applied after a reveal, never on the first render.
+- **The reveal uses layout effects** so the points move to the top before the new jump is painted (React 19, so there is no SSR warning). Reduced motion is read from `matchMedia` inside the effect and passes `immediate: true`; the arc then appears at once.
+- **HeightFigure accessibility.** The animated digits and " cm" are `aria-hidden`; a `sr-only` `aria-live="polite"` span carries the final value.
+- **Button `sm` is now `h-11`** (was `h-9`), so every small button on the demo path (chapter buttons, header links, seeded jump buttons, error and empty-state buttons) meets 44px. `hover:bg-sun/85` became `hover:bg-sun/90`, which clears the Phase 1 tripwire note. `components/ui/*` is on the CLAUDE.md never-touch list, but this phase's spec names the file explicitly.
+- **Mobile menu.** The panel is a second `<nav>` inside the sticky `<header>`, so the header's own `border-b` closes it below; it has `border-t border-border` and `bg-background`, uses the `hidden` attribute when closed, and closes on link click and on `pathname` change. The header bar moved `h-16` from `<header>` to the inner row (the closed header is now 1px taller because of the border; the story figure's `top-16` overlaps it by that 1px).
+- **Landing links** sit in their own `<p>` under the new paragraph so the link text stays "Start with chapter one" and "Open the jump lab" as written. `#stand` got `scroll-mt-[50vh]` so the chapter text lands below the sticky figure.
+- **Error pages** (`app/error.tsx`, `app/not-found.tsx`, `app/play/error.tsx`, `app/notes/error.tsx`) render inside the root layout in `app/layout.tsx` (there is no `global-error.tsx`), so the header and mobile menu stay on them.
+- **Commit grouping.** `app/layout.tsx` holds both the A4 metadata and the B1 footer. It is listed once, in the `sec(web)` entry, so that commit is not empty; the A4 `chore` entry holds `app/page.tsx` and `scripts/proof.mts`. The one-sentence empty-state edits live in files already listed by earlier entries.
+
+### Failed attempts
+
+None.
+
+### Files changed
+
+README.md, DELIVERY.md (new), HANDOFF.md, DEMO.md, IDENTITY.md (Amendments line), components/trajectory-plot.tsx, components/arc-reveal.tsx (new), components/height-figure.tsx (new), components/jump-lab.tsx, tests/plot-geometry.test.ts (new), components/site-header.tsx, components/ui/button.tsx, components/class-roster.tsx, components/story-stage.tsx, app/notes/page.tsx, app/page.tsx, scripts/proof.mts, app/layout.tsx, SECURITY.md (new), .farm-commits.json (new).
+
+### Commands run
+
+None, the agent cannot run commands.
+
+### Open questions
+
+- The DEMO step 4 text says "a seeded jump picked from the deck". On `/play` the seeded jumps are buttons, and the throwable deck lives on `/` (where the figure uses the static `TrajectoryPlot`). The text is kept as specified; reword it to "picked from the seeded jumps" if that reads better to the presenter.
+- `react-spring`'s `onRest` with a delayed start was not run here. If the arc ever appears late on a real device, the 1.5 s timer fallback in `components/arc-reveal.tsx` is what shows it; tune `DROP_STAGGER_MS` and the `delayMs` in `components/jump-lab.tsx` after the first rehearsal.
+- The sticky story figure on `/` is tall on a 360 x 640 phone (chapter row, plot, deck). The chapter row no longer wraps, but a Phase 5 pass may want a compact figure below sm.
+
+### Next best step
+
+The human pilot session fills `fixtures/pilot.json` (20 or more real jumps), then `npm run seed`. Then the Phase 5 frontend pass and kit signature 3 (pointer tilt or magnetic pull on the primary control).
