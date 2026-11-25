@@ -344,3 +344,75 @@ None, the agent cannot run commands.
 ### Next best step
 
 The human pilot session fills `fixtures/pilot.json` (20 or more real jumps), then `npm run seed`. Then the Phase 5 frontend pass and kit signature 3 (pointer tilt or magnetic pull on the primary control).
+
+## Phase 5 log
+
+### Goal
+
+DEMO step 1 opens on the product: the first screen of `/` shows the seeded j-02 arc as an oversized inline figure, the sun dot is pulled along the fitted parabola toward the pointer, and one sentence under it reads the hip height at that instant. Around it: an L3 editorial home, primitives everywhere, a short footer, scene slots 4 to 6, and the submission package.
+
+### Status
+
+Every slice (A1, A2, A3, B1, B2, B3, C1, C2) is written; none was cut. Nothing was built, tested or deployed by the agent. `npm run build`, `npm test`, `npm run proof` and the redeploy are the runner's job and are unverified.
+
+| Slice | Status |
+| --- | --- |
+| A1 shell | done: header menu toggle is `<Button variant="ghost" size="icon">`, `size: icon` gains `p-0`, footer is one sentence plus four links, `Input` forwards its ref and styles `type="file"`, jump-lab uses it |
+| A2 home | done: kicker, h1, one-sentence standfirst, rule line, `<HeroArc>`, one `<Button asChild size="lg">` to `#stand`, scene-1, two problem sentences, notes aside; chapters at `min-h-[40vh]`, one sentence each |
+| A3 /play and /notes | done: loading, error and 404 states on `Card` with the sun dot; /notes section bodies cut to one sentence, the estimate comparison is a table inside a fold, browser APIs moved into a fold |
+| B1 signature 3 | done: `components/hero-arc.tsx` |
+| B2 scenes | done: scene-4 (/play, above the input buttons), scene-5 (`ResultEmptyState`), scene-6 (404) |
+| B3 motion | done: `saltara-rule` keyframe, `.saltara-rule-line` and the scroll-driven `.saltara-rule-scroll`, reduced-motion block extended, IDENTITY.md amendments |
+| C1 docs | done: README.md rewritten in the spec order, LICENSE, docs/SCREENSHOTS.md |
+| C2 package | done: SUBMISSION.md, this log, `.farm-commits.json` |
+
+### Decisions
+
+- Signature placement: first screen of `/` carries signature 3 (`components/hero-arc.tsx`), the `/play` core action carries signature 2 (`components/height-figure.tsx`), and the `/` chapters carry signature 1 (`components/jump-deck.tsx`). Recorded in IDENTITY.md Amendments.
+- All six scene slots are SVG fallbacks; no public/brand/scene-*.png uploaded yet. Slots: 1 and 2 on `/` (`app/page.tsx`), 3 on `/notes` (`app/notes/page.tsx`), 4 and 5 on `/play` (`components/jump-lab.tsx`), 6 on the 404 page (`app/not-found.tsx`).
+- HeroArc geometry reuses `plotGeometry` from `components/trajectory-plot.tsx`; the dot is an absolutely positioned `animated.span` over the `TrajectoryPlot` at the percentage position of `px(t) / W` and `py(y) / H`. The pointer maps to the nearest airborne sample by x, and the dot sits on the fitted parabola at that sample's time (not on the noisy sample). The height is `(standingHipY - fitY(t)) / pxPerMetre`, clamped at 0, and the time is `t - roots[0]`.
+- The sentence names the reported height ("Saltara reports 33.6 cm for the jump") instead of "the apex says", because at the apex the hip rise (standing to apex, about 39.6 cm for j-02) and the reported flight-time height differ, and "the apex says 33.6" next to "39.6 cm above standing" would contradict itself.
+- HeroArc solves j-02 with `{ quiet: true }`, so the first screen does not add `[core]` log lines.
+- Slider values are absolute sample indices (`aria-valuemin` is the first airborne frame, `aria-valuemax` the last). ArrowUp and ArrowDown also step, as on any slider. Blur returns the dot to the apex.
+- The headline count-up runs once after hydration from 0 to the final value; the server HTML shows the final value, and reduced motion skips it.
+- The scene-4 slot hides while the camera or a clip is running (and while the camera loads), so the video stage moves up during a live jump.
+- The kicker reads "Field note, Year 9 PE, class 9B", built from `lesson.className`.
+- Chapter headings keep `saltara-wipe-scroll`; a `.saltara-rule-line.saltara-rule-scroll` rule sits above each one.
+- Footer: Source code, PhysTech 2027 on Devpost and Security open in a new tab with `rel="noopener noreferrer"`; Notes is an internal Link. The sentence names cdn.jsdelivr.net and storage.googleapis.com and keeps "no wallet and no account".
+- README and SUBMISSION avoid the word "video" entirely (even the API name), so the submission grep stays at zero; they say "the per-frame callback (rVFC)".
+
+### Failed attempts
+
+None.
+
+### Files changed
+
+.farm-delta.md (runner file), components/ui/button.tsx, components/ui/input.tsx, components/site-header.tsx, app/layout.tsx, components/jump-lab.tsx, app/page.tsx, components/story-stage.tsx, components/hero-arc.tsx (new), app/globals.css, app/loading.tsx, app/play/loading.tsx, app/notes/loading.tsx, app/error.tsx, app/play/error.tsx, app/notes/error.tsx, app/not-found.tsx, app/notes/page.tsx, public/illustrations/scene-4.svg (new), public/illustrations/scene-5.svg (new), public/illustrations/scene-6.svg (new), IDENTITY.md (two Amendments lines), DEMO.md (step 1), README.md, LICENSE (new), docs/SCREENSHOTS.md (new), SUBMISSION.md (new), HANDOFF.md, .farm-commits.json.
+
+### Commands run
+
+None, the agent cannot run commands.
+
+### Open questions
+
+- Unverified build items: `to([pull.rx, pull.ry], ...)` from `@react-spring/web` (components/hero-arc.tsx:178) and `React.forwardRef` with `ComponentPropsWithoutRef<"input">` (components/ui/input.tsx:11) are typed from memory of the v10 and React 19 APIs; the runner's build is the check.
+- `TrajectoryPlot` keeps `min-w-[20rem]` on its SVG. In the hero panel at 360 px wide the column is 320 px minus `p-3`, so the plot may scroll a few pixels sideways inside its own `overflow-x-auto` wrapper and the dot overlay (positioned on the wrapper) can be off by that much (components/hero-arc.tsx:187). Check at 360 px.
+- The count-up shows 0.0 for a moment after hydration before springing up (components/hero-arc.tsx:96). If a judge sees it as a flicker, drop the count-up and keep the static number.
+- `/play` still uses `max-w-3xl` (app/play/page.tsx:18); L3 applies to `/` only.
+- The "Your turn" line in the Class chapter is two sentences (components/story-stage.tsx, last section); kept because it carries the hand-off to `/play`.
+- Responsive variants at 360, 768 and 1280 were reasoned from classes, not seen in a browser.
+- The spec's footer link "Security" points at `https://github.com/mericcintosun/saltara/blob/main/SECURITY.md`; it resolves only once the branch is pushed.
+
+### Next best step
+
+The human pilot fills `fixtures/pilot.json` (20 or more real jumps, then `npm run seed`), then the judge rounds and Phases 6 and 7.
+
+## Manual submit checklist
+
+- [ ] Presenter name and contact for the Google Form.
+- [ ] Country and time zone for the Google Form.
+- [ ] Student eligibility confirmation on Discord (the sidebar says "Students only", the text says "open to all ages").
+- [ ] Post in the right Discord channel (the event page has "PhysTech 2026 channel" and "AnimalHack" copy errors).
+- [ ] Devpost submission (fields in SUBMISSION.md) and the Discord Google Form, at least one week before 26 June 2027, 12:00 EDT.
+- [ ] The Zoom talk on 27 June 2027 (10 minutes, about 3 of them Q&A).
+- [ ] Paste the builder's own demo video link into the form.
