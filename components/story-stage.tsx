@@ -33,10 +33,11 @@ function StoryEmptyState() {
     <div className="flex items-center gap-3 rounded-3xl bg-card p-6 text-lg leading-relaxed">
       <span aria-hidden className="size-3 shrink-0 rounded-full bg-sun" />
       <p>
-        No recorded jumps in this lesson yet. Turn on the camera and jump.{" "}
+        The story figure appears here once the lesson has recorded jumps; until then, measure one in the{" "}
         <Link href="/play" className="font-bold text-primary underline decoration-sun decoration-2 underline-offset-4">
-          Open the jump lab
+          jump lab
         </Link>
+        .
       </p>
     </div>
   );
@@ -100,7 +101,7 @@ export function StoryStage({ lesson: payload, classScene }: { lesson: LessonPayl
   return (
     <div>
       <figure className="sticky top-16 z-10 -mx-5 bg-background px-5 pb-4 pt-3">
-        <nav aria-label="Chapters" className="mb-3 flex flex-wrap items-center gap-1">
+        <nav aria-label="Chapters" className="mb-3 flex items-center gap-1 overflow-x-auto sm:flex-wrap">
           {CHAPTERS.map((c, i) => (
             <Button
               key={c.id}
@@ -124,7 +125,7 @@ export function StoryStage({ lesson: payload, classScene }: { lesson: LessonPayl
       </figure>
 
       <div className="space-y-2">
-        <section id="stand" className="min-h-[55vh] py-10">
+        <section id="stand" className="min-h-[55vh] scroll-mt-[50vh] py-10">
           <h2 className="saltara-wipe-scroll text-3xl font-bold">Stand still for half a second</h2>
           <p className="mt-4 text-lg leading-relaxed">
             {first} faces the laptop from about two metres away. For the first 0.5 seconds of the clip Saltara only

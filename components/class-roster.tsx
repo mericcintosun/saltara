@@ -38,7 +38,7 @@ function RosterEmptyState({ onReset }: { onReset: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-background p-4 text-sm">
       <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
-      <p className="flex-1 text-muted-foreground">No students yet. Add a name above, or bring back the demo class.</p>
+      <p className="flex-1 text-muted-foreground">Students and their three attempts appear here once you add a name above or restore the demo class.</p>
       <Button size="sm" variant="soft" onClick={onReset}>
         <RotateCcw /> Restore demo class
       </Button>
@@ -117,9 +117,11 @@ export function ClassRoster({
                     aria-pressed={isActive}
                     className={cn("h-auto w-full justify-between rounded-2xl px-4 py-3", !isActive && "bg-background")}
                   >
-                    <span className="flex items-center gap-2">
-                      {isActive && <span aria-hidden className="size-2.5 rounded-full bg-sun" />}
-                      {s.name}
+                    <span className="flex min-w-0 items-center gap-2">
+                      {isActive && <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />}
+                      <span className="max-w-[12rem] truncate" title={s.name}>
+                        {s.name}
+                      </span>
                     </span>
                     <span className="flex items-center gap-3 font-normal">
                       <span className="flex items-center gap-3 tabular-nums">

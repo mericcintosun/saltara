@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 function Fold({ summary, children }: { summary: string; children: React.ReactNode }) {
   return (
     <details className="group rounded-3xl bg-card px-6 py-4">
-      <summary className="flex cursor-pointer list-none items-center gap-3 font-bold">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 font-bold">
         <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
         {summary}
       </summary>
@@ -28,7 +28,7 @@ function PilotEmptyState() {
     <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-card p-5 leading-relaxed">
       <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
       <p className="flex-1">
-        No pilot jumps recorded yet. The agreement plot appears here once the first wall-mark session is in.
+        The agreement plot appears here once the first wall-mark pilot session is recorded.
       </p>
       <Link
         href="/play"
