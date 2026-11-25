@@ -91,20 +91,20 @@ Sample data: the 12 seeded jumps of Year 9 PE, class 9B (synthetic traces rebuil
 
 | id | true rise cm | headline cm | error cm | true px/m | gravity px/m | ms |
 | --- | --- | --- | --- | --- | --- | --- |
-| j-01 | 31.8 | 32.0 | 0.2 | 410 | 407 | 1.60 |
-| j-02 | 33.9 | 33.6 | -0.3 | 412 | 416 | 0.52 |
-| j-03 | 27.6 | 27.5 | -0.1 | 388 | 391 | 0.23 |
-| j-04 | 29.1 | 28.9 | -0.2 | 391 | 396 | 0.19 |
-| j-05 | 39.2 | 38.8 | -0.4 | 436 | 440 | 0.98 |
-| j-06 | 37.1 | 37.1 | -0.0 | 433 | 433 | 2.61 |
-| j-07 | 24.4 | 25.6 | 1.2 | 402 | 378 | 0.09 |
-| j-08 | 26.2 | 27.2 | 1.0 | 405 | 389 | 0.09 |
-| j-09 | 30.1 | 30.7 | 0.6 | 421 | 413 | 0.09 |
-| j-10 | 28.9 | 29.6 | 0.7 | 418 | 409 | 0.08 |
-| j-11 | 35.2 | 34.9 | -0.3 | 377 | 382 | 0.08 |
-| j-12 | 36.8 | 36.1 | -0.7 | 380 | 386 | 0.09 |
+| j-01 | 31.8 | 32.0 | 0.2 | 410 | 407 | 1.05 |
+| j-02 | 33.9 | 33.6 | -0.3 | 412 | 416 | 0.28 |
+| j-03 | 27.6 | 27.5 | -0.1 | 388 | 391 | 0.14 |
+| j-04 | 29.1 | 28.9 | -0.2 | 391 | 396 | 0.10 |
+| j-05 | 39.2 | 38.8 | -0.4 | 436 | 440 | 0.35 |
+| j-06 | 37.1 | 37.1 | -0.0 | 433 | 433 | 0.11 |
+| j-07 | 24.4 | 25.6 | 1.2 | 402 | 378 | 1.68 |
+| j-08 | 26.2 | 27.2 | 1.0 | 405 | 389 | 0.06 |
+| j-09 | 30.1 | 30.7 | 0.6 | 421 | 413 | 0.05 |
+| j-10 | 28.9 | 29.6 | 0.7 | 418 | 409 | 0.04 |
+| j-11 | 35.2 | 34.9 | -0.3 | 377 | 382 | 0.04 |
+| j-12 | 36.8 | 36.1 | -0.7 | 380 | 386 | 0.04 |
 
-Mean absolute error: 0.48 cm over 12 solved jumps (0 rejected). Median solver latency: 0.14 ms.
+Mean absolute error: 0.48 cm over 12 solved jumps (0 rejected). Median solver latency: 0.11 ms.
 <!-- PROOF:END solver -->
 
 ### Tests
@@ -120,9 +120,9 @@ HEAD requests from the proof run to the URLs in `lib/pose-tracker.ts`:
 
 | url | status | ms |
 | --- | --- | --- |
-| https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm/vision_wasm_internal.js | 200 | 140 |
-| https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm/vision_wasm_internal.wasm | 200 | 64 |
-| https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task | 200 | 186 |
+| https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm/vision_wasm_internal.js | 200 | 132 |
+| https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm/vision_wasm_internal.wasm | 200 | 76 |
+| https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task | 200 | 227 |
 <!-- PROOF:END engine -->
 
 ## Honest status
