@@ -14,7 +14,7 @@
 
 1. `/` (`app/page.tsx`): the story headline and the five chapters walk one recorded jump through the method. Throw the deck once.
 2. `/play` (`app/play/page.tsx`): Start camera shows the mirrored video, plum skeleton, sun-yellow hip dot and fps badge.
-3. `/play` (`app/play/page.tsx`): replay j-02 or jump live. The trajectory plot shows the fitted arc, the cm result, "scale from gravity" in px/m, and the three estimates side by side.
+3. `/play` (`app/play/page.tsx`): replay j-02, jump live, or load a recorded clip. A line under the result says which source produced it. The trajectory plot shows the fitted arc, the cm result, "scale from gravity" in px/m, and the three estimates side by side.
 4. `/play` (`app/play/page.tsx`): class list with three names and three attempts each, best marked, CSV download.
 5. `/notes` (`app/notes/page.tsx`): the Bland-Altman plot, with the placeholder label shown until the real pilot replaces it.
 6. Back on `/play` (`app/play/page.tsx`): the last arc on screen and the closing line.

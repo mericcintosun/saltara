@@ -47,7 +47,7 @@ All three are linked from the sticky header (`components/site-header.tsx`).
 - `lib/data/seed.ts`: the only reader of the fixtures; narrows `attempt`, `fps` and `jumper` with guards that throw on bad values. Exports `lesson`, `students`, `seedJumps`, `pilotRows`, `pilotIsPlaceholder`, `studentName`, `traceFor`.
 - `lib/data/trace.ts`: `traceFor()` (moved unchanged: mulberry32 seeded by `hashId(j.id)`) rebuilds each jump frame by frame (stand, dip, flight, landing, jitter) so the real solver runs on it. Client components import it from here.
 - `lib/data.ts`: one-line shim (`export * from "./data/seed"`). Nothing imports it any more; new code uses `@/lib/data/seed` or the adapter.
-- `lib/adapter.ts`: `adapterMode()` reads `ADAPTER_MODE` (`real` only for the exact string, else `fake`), `fakeAdapter`, `realAdapter` (Phase 2 stub serving the same seed), `getAdapter()`.
+- `lib/adapter.ts`: the selector only (Phase 2): `adapterMode()` returns `ADAPTER_MODE` from `lib/config.ts`, `getAdapter()` picks `lib/adapters/fake.ts` or `lib/adapters/real.ts`. See the Phase 2 log.
 - `app/api/lesson/route.ts`, `app/api/pilot/route.ts`: `GET` returns `ApiResponse<LessonPayload>` / `ApiResponse<PilotPayload>`, Node runtime.
 - `lib/tokens.ts`: `brandHex`, the only mirror of the globals.css hexes, used by `app/opengraph-image.tsx`.
 - `scripts/seed.mjs` (`npm run seed`): validates ids and ranges in both fixtures, sorts by id, rewrites them as `JSON.stringify(x, null, 2) + "\n"`. Idempotent, no clock or randomness.
@@ -152,3 +152,65 @@ None, the agent cannot run commands.
 ### Next best step
 
 Mission 1 and 2 on real footage: hip tracking and the gravity solver on live jumps, with live jumps flowing into the same `/play` result path that now renders adapter-served seed jumps. The Phase 2 agent records the verified live URL here.
+
+## Phase 2 log
+
+### Goal
+
+Make the gravity ruler run on real frames behind a proper seam: one config file (`lib/config.ts`), a selector with fake and real adapters, typed rejection codes and the shoulder-drift flag in the solver, a recorded-clip input on `/play` next to the live camera and the seeded replay, and proof through Vitest and `npm run proof`.
+
+### Status
+
+All five slices are written. Nothing was compiled, tested or deployed by the agent; `npm install`, `npm run build`, `npm test`, `npm run proof` and the deploy are the runner's job and are unverified.
+
+- **Mechanism that went real:** the in-browser measurement pipeline. MediaPipe Pose Landmarker lite (`@mediapipe/tasks-vision` 0.10.21, loaded only through `loadPoseLandmarker()`, wrapped by `loadEngine()` in `lib/engine.ts` with a 20 s timeout and one retry), frames timed with `requestVideoFrameCallback` mediaTime, `toSample()` adding shoulder width, then `analyzeJump()` in `lib/jump-solver.ts`. It is reachable from the live camera and from a recorded clip (file mode), in both adapter modes.
+- **Still on fixtures:** `getLesson` and `getPilot` in both `lib/adapters/fake.ts` and `lib/adapters/real.ts` serve the seed (class 9B and the labelled placeholder pilot). The pilot needs a human session.
+- **Live contract:** `.farm-live.json` is `{ "requiredEnv": [], "optionalEnv": [] }`. requiredEnv is empty because pose tracking and the solver run in the browser from public CDN files with no key.
+- **Live URL:** https://saltara.vercel.app (the agent could not open it; the human checklist below covers it).
+
+### Manual checklist for the human
+
+- [ ] On https://saltara.vercel.app/play with `ADAPTER_MODE=real`: the page opens on the camera with the "Live engine" label.
+- [ ] 10 live jumps in a row produce a result (cm, scale from gravity in px/m, three estimates, the "Live: measured from your camera in this browser." line).
+- [ ] A recorded phone clip goes through file mode ("Recorded clip" button) and shows "Recorded clip: measured from <file name> in this browser."
+- [ ] Replay of j-02 still shows about 34 cm with the "Sample data" line.
+- [ ] Tune thresholds in `lib/config.ts` only (take-off fraction, settle time, R² gate, drift limit).
+- [ ] `npm test` passes; `npm run proof` fills the three README blocks.
+
+### Decisions
+
+- `lib/config.ts` also holds five constants the spec did not list, so `lib/jump-solver.ts` keeps no gate literal besides `G`: `MIN_CLIP_SAMPLES = 20`, `STANDING_WINDOW_SECONDS = 0.5`, `WATCHER_BUFFER_SECONDS = 4`, `WATCHER_STILL_FRAMES = 15` (same values as Phase 1) and `FILE_PLAYBACK_RATE = 0.5`. A clip plays at half speed while tracked so the pose model sees more frames; timestamps stay in media time, so the physics is unchanged.
+- Code mapping in `analyzeJump`: fewer than 20 samples or fewer than 6 airborne frames is `too_few_frames`; legs of zero or negative length is `feet_hidden`; no take-off or no landing is `no_jump`; no fit, a parabola opening the wrong way, R² under 0.9 or an arc that never reaches take-off height is `low_fit`. Reasons keep the measured number where there is one.
+- `drift` is a flag, never a rejection: `flags.drift` is set on any result (ok or not) whose samples carry `shoulderW` with max/min above 1.05. Seeded traces have no `shoulderW`, so they never drift.
+- One `console.info` per core step, all prefixed `[core]`: take-off, landing, fit ok (frames, r2 to 3 decimals, px/m rounded), rejected (code); engine loading, ready (ms), failed (code). No sample arrays are logged. The proof script mutes `console.info` while it times the solver.
+- `JumpLab` takes `source: SourceInfo`; the initial mode is `source.initialInput`. Camera and file share one video stage (mirrored only for the camera) and one `runLoop(landmarker, onSample)`. File mode drops repeated timestamps before `JumpTraceSchema` sees them and checks duration against `MAX_CLIP_SECONDS` once metadata loads (an unknown duration, as some webm files report, is let through; the 2000-sample cap still applies).
+- Camera permission problems are not engine errors, so they carry `code: null` and show under "Camera unavailable" in the BAD tone; engine and file problems carry their `CoreErrorCode`, and the badge title and tone come from a `switch` on the code.
+- The replay button is now "Seeded jumps" (lucide `Rewind`) so it does not clash with the new "Recorded clip" button (lucide `Film`).
+- The seed origin line is templated: `Sample data: seeded clip ${id} of ${lesson.className}, not a live measurement.` For the seed it reads "Sample data: seeded clip j-02 of Year 9 PE, class 9B, not a live measurement." It names the actual clip when another seeded jump is picked, so it is not the literal spec string.
+- `vitest.config.mts` aliases `@/` with a regex (`/^@\//`) so scoped packages such as `@mediapipe/tasks-vision` are not rewritten.
+- `scripts/proof.mts` reads the seed jumps from `fixtures/lesson-9b.json` directly and loads the solver with dynamic `import()` inside `try`, so a resolution failure writes a "Not run in this build:" line instead of throwing. Vitest runs with `--silent` so solver logs do not pollute the JSON report on stdout. The engine HEAD checks run in parallel before Vitest, which keeps the worst case (2 x 8 s plus 90 s) under 2 minutes.
+- Two extra tests beyond the required six: steady shoulder width gives no drift flag, and `VideoFileSchema` rejects a PDF and a 500 MB video.
+
+### Failed attempts
+
+None.
+
+### Files changed
+
+lib/config.ts (new), lib/errors.ts (new), lib/adapters/fake.ts (new), lib/adapters/real.ts (new), lib/adapter.ts, lib/types.ts, .env.example, .farm-live.json (new), lib/jump-solver.ts, lib/live-sample.ts (new), lib/schemas.ts (new), lib/engine.ts (new), components/jump-lab.tsx, app/play/page.tsx, vitest.config.mts (new), tests/jump-solver.test.ts (new), scripts/proof.mts (new), package.json, README.md, DEMO.md, HANDOFF.md, .farm-commits.json (new).
+
+### Commands run
+
+None, the agent cannot run commands. (One stray shell call was made by mistake: a bare `echo` that touched no project file and ran no npm, git or test command.)
+
+### Open questions
+
+- `loadPoseLandmarker()` memoises its promise and clears it only when it rejects. After a real failure the retry in `loadEngine()` starts a fresh download. After a timeout the first download is usually still pending, so the retry waits on that same promise for another 20 s rather than starting over. In practice that gives one download a 40 s budget. A true fresh retry needs a change in `lib/pose-tracker.ts`, which this phase may not edit.
+- The drift gate uses raw max/min shoulder width over the whole clip, as specified. Shoulder landmark jitter of 2 to 3 px on a 100 px shoulder could set the flag on still jumpers. If the live checklist shows false flags, compare medians of the first and last few frames instead (change in `shoulderDrift()` only).
+- `ADAPTER_MODE` is read when `lib/config.ts` loads, and `/play` is prerendered, so the mode is fixed at build time. Changing it on Vercel needs a redeploy.
+- `analyzeJump` logs on every call, so `/play` and `/` print about three `[core]` lines per seeded jump when they solve the demo class on load. If that is too noisy, add a `quiet` option for the seed path.
+- `tests/jump-solver.test.ts` falls under the tsconfig `**/*.ts` include, so `next build` type-checks it against the `vitest` types. If the build complains, exclude `tests` in tsconfig.json.
+
+### Next best step
+
+Mission 3, the animated wow moment, built on real live jumps: after a live jump the airborne hip points drop onto the plot one by one, the parabola wipes in over them, and kit signature 2 (spring overshoot on the cm figure) lands the number above "scale from gravity: N px/m".
