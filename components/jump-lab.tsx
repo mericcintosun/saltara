@@ -1,23 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CameraOff, Film, Save } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Camera, CameraOff, Film, Rewind, Save, Square } from "lucide-react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import { ClassRoster, MAX_ATTEMPTS, type RosterStudent } from "@/components/class-roster";
 import { TrajectoryPlot } from "@/components/trajectory-plot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { FILE_PLAYBACK_RATE, MAX_CLIP_MB, MAX_CLIP_SECONDS } from "@/lib/config";
 import { traceFor } from "@/lib/data/trace";
+import { loadEngine } from "@/lib/engine";
+import { hintFor, isCoreError, type CoreErrorCode } from "@/lib/errors";
 import { analyzeJump, createJumpWatcher, headlineCm, type JumpAnalysis, type PoseSample } from "@/lib/jump-solver";
-import { loadPoseLandmarker, readPose, SKELETON_EDGES, LANDMARK, type FramePose } from "@/lib/pose-tracker";
-import type { LessonPayload } from "@/lib/types";
+import { toSample } from "@/lib/live-sample";
+import { readPose, SKELETON_EDGES, LANDMARK, type FramePose } from "@/lib/pose-tracker";
+import { JumpTraceSchema, VideoFileSchema } from "@/lib/schemas";
+import type { LessonPayload, SourceInfo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Mode = "camera" | "replay";
+type Mode = "camera" | "replay" | "file";
+type Origin = "seed" | "camera" | "file";
 type CamStatus = "idle" | "loading" | "live" | "error";
+type FileStatus = "idle" | "loading" | "running" | "done";
 type RVFC = (cb: (now: number, meta: { mediaTime: number }) => void) => number;
 type WakeLockNav = { wakeLock: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } };
+
+/** A measured jump from this browser (camera or recorded clip). */
+type Measured = { samples: PoseSample[]; analysis: JumpAnalysis; origin: "camera" | "file"; fileName?: string };
+/** A problem with the input itself (camera, engine or file), before any jump is analysed. */
+type InputProblem = { code: CoreErrorCode | null; text: string };
 
 const STORAGE_KEY = "saltara.class.v1";
 
@@ -36,13 +48,47 @@ function seedRoster(payload: LessonPayload): RosterStudent[] {
   }));
 }
 
-export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
+/** Jump-quality codes are a warning to retry; input and engine codes are a hard stop. */
+function toneFor(code: CoreErrorCode | null): "warn" | "bad" {
+  switch (code) {
+    case "too_few_frames":
+    case "low_fit":
+    case "feet_hidden":
+    case "no_jump":
+    case "drift":
+      return "warn";
+    default:
+      // invalid_input, parse_failure, upstream_timeout, upstream_error, not_configured, camera problems
+      return "bad";
+  }
+}
+
+function problemTitle(code: CoreErrorCode | null): string {
+  switch (code) {
+    case null:
+      return "Camera unavailable";
+    case "upstream_timeout":
+      return "Pose model timed out";
+    case "upstream_error":
+      return "Pose model unavailable";
+    case "invalid_input":
+      return "Clip not accepted";
+    case "parse_failure":
+      return "Clip could not be measured";
+    case "not_configured":
+      return "Not available here";
+    default:
+      return "Jump rejected";
+  }
+}
+
+export function JumpLab({ lesson: payload, source }: { lesson: LessonPayload; source: SourceInfo }) {
   const { lesson, students, jumps } = payload;
   const defaultReplayId = jumps.find((j) => j.id === DEFAULT_REPLAY)?.id ?? jumps[0]?.id ?? "";
   const defaultActiveId = students[0]?.id ?? null;
   const studentName = (id: string) => students.find((s) => s.id === id)?.name ?? "Unknown";
 
-  const [mode, setMode] = useState<Mode>("replay");
+  const [mode, setMode] = useState<Mode>(source.initialInput === "camera" ? "camera" : "replay");
   const [replayId, setReplayId] = useState(defaultReplayId);
   const [roster, setRoster] = useState<RosterStudent[]>(() => seedRoster(payload));
   const [activeId, setActiveId] = useState<string | null>(defaultActiveId);
@@ -50,14 +96,19 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   const [cam, setCam] = useState<CamStatus>("idle");
-  const [camError, setCamError] = useState<string | null>(null);
+  const [fileStatus, setFileStatus] = useState<FileStatus>("idle");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [problem, setProblem] = useState<InputProblem | null>(null);
   const [fps, setFps] = useState<number | null>(null);
   const [hint, setHint] = useState<string | null>(null);
-  const [live, setLive] = useState<{ samples: PoseSample[]; analysis: JumpAnalysis } | null>(null);
+  const [live, setLive] = useState<Measured | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const fileCleanupRef = useRef<(() => void) | null>(null);
   const runningRef = useRef(false);
   const lastTsRef = useRef(0);
   const hintRef = useRef<string | null>(null);
@@ -92,7 +143,23 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
     return { jump, samples, analysis: analyzeJump(samples) };
   }, [replayId, jumps]);
 
-  const current = mode === "replay" ? replay : live;
+  const current: { samples: PoseSample[]; analysis: JumpAnalysis; origin: Origin; label: string } | null =
+    mode === "replay"
+      ? replay && {
+          samples: replay.samples,
+          analysis: replay.analysis,
+          origin: "seed" as const,
+          label: `Sample data: seeded clip ${replay.jump.id} of ${lesson.className}, not a live measurement.`,
+        }
+      : live && {
+          samples: live.samples,
+          analysis: live.analysis,
+          origin: live.origin,
+          label:
+            live.origin === "camera"
+              ? "Live: measured from your camera in this browser."
+              : `Recorded clip: measured from ${live.fileName ?? "your clip"} in this browser.`,
+        };
   const activeStudent = roster.find((s) => s.id === activeId) ?? null;
 
   const drawPose = useCallback((pose: FramePose) => {
@@ -128,23 +195,44 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
     ctx.fill();
   }, []);
 
-  const stopCamera = useCallback(() => {
+  /** Stops whichever input runs (camera stream or recorded clip) and frees its resources. */
+  const stopInput = useCallback(() => {
     runningRef.current = false;
+    fileCleanupRef.current?.();
+    fileCleanupRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+      if (objectUrlRef.current) {
+        video.removeAttribute("src");
+        video.load();
+      }
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
     wakeRef.current?.release().catch(() => undefined);
     wakeRef.current = null;
     setCam((c) => (c === "error" ? c : "idle"));
+    setFileStatus((s) => (s === "done" ? s : "idle"));
     setFps(null);
+    hintRef.current = null;
+    setHint(null);
   }, []);
 
-  useEffect(() => stopCamera, [stopCamera]);
+  useEffect(() => stopInput, [stopInput]);
 
+  /** The rVFC frame loop shared by the camera and the recorded clip. */
   const runLoop = useCallback(
-    (landmarker: PoseLandmarker) => {
+    (landmarker: PoseLandmarker, onSample: (s: PoseSample) => void) => {
       const video = videoRef.current;
       if (!video) return;
-      const watcher = createJumpWatcher((samples, analysis) => setLive({ samples, analysis }));
+      frameTimes.current = [];
+      frameCount.current = 0;
       const rvfc = (video as unknown as { requestVideoFrameCallback?: RVFC }).requestVideoFrameCallback;
 
       const onFrame = (now: number, meta?: { mediaTime: number }) => {
@@ -153,7 +241,7 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
         lastTsRef.current = ts;
         const pose = readPose(landmarker, video, meta?.mediaTime ?? video.currentTime, ts);
         if (pose) {
-          watcher.push(pose.sample);
+          onSample(toSample(pose, video.videoWidth));
           drawPose(pose);
         }
         const nextHint = !pose
@@ -184,38 +272,153 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
   );
 
   const startCamera = async () => {
+    stopInput();
     setCam("loading");
-    setCamError(null);
+    setProblem(null);
     setLive(null);
+    let stream: MediaStream;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 }, facingMode: "user" },
         audio: false,
       });
-      streamRef.current = stream;
-      const video = videoRef.current;
-      if (!video) throw new Error("Video element missing.");
-      video.srcObject = stream;
-      await video.play();
-      const landmarker = await loadPoseLandmarker();
-      if ("wakeLock" in navigator) {
-        try {
-          wakeRef.current = await (navigator as unknown as WakeLockNav).wakeLock.request("screen");
-        } catch {
-          // Wake Lock is a nice-to-have; the lesson still works without it.
-        }
-      }
-      runningRef.current = true;
-      setCam("live");
-      runLoop(landmarker);
     } catch (e) {
-      stopCamera();
       setCam("error");
-      setCamError(
-        e instanceof Error && e.name === "NotAllowedError"
-          ? "Camera permission was declined. Allow the camera in the address bar and try again."
-          : `The camera or the pose model could not start (${e instanceof Error ? e.message : "unknown error"}).`
-      );
+      setProblem({
+        code: null,
+        text:
+          e instanceof Error && e.name === "NotAllowedError"
+            ? "Camera permission was declined. Allow the camera in the address bar and try again, or load a recorded clip."
+            : `The camera could not start (${e instanceof Error ? e.message : "unknown error"}). Load a recorded clip instead.`,
+      });
+      return;
+    }
+    streamRef.current = stream;
+    const video = videoRef.current;
+    if (!video) {
+      stopInput();
+      setCam("error");
+      setProblem({ code: null, text: "The video element is missing. Reload the page and try again." });
+      return;
+    }
+    video.srcObject = stream;
+    try {
+      await video.play();
+    } catch {
+      // Autoplay of a muted stream is allowed; the frame loop still reads it if play() complains.
+    }
+    const engine = await loadEngine();
+    if (streamRef.current !== stream) return; // stopped while the engine loaded
+    if (isCoreError(engine)) {
+      stopInput();
+      setCam("error");
+      setProblem({ code: engine.error, text: engine.hint });
+      return;
+    }
+    if ("wakeLock" in navigator) {
+      try {
+        wakeRef.current = await (navigator as unknown as WakeLockNav).wakeLock.request("screen");
+      } catch {
+        // Wake Lock is a nice-to-have; the lesson still works without it.
+      }
+    }
+    runningRef.current = true;
+    setCam("live");
+    const watcher = createJumpWatcher((samples, analysis) => setLive({ samples, analysis, origin: "camera" }));
+    runLoop(engine, (s) => watcher.push(s));
+  };
+
+  const pickClip = () => fileInputRef.current?.click();
+
+  const onClipPicked = async (e: ChangeEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = ""; // picking the same file again fires change again
+    if (!file) return;
+    stopInput();
+    setMode("file");
+    setProblem(null);
+    setLive(null);
+    setFileName(file.name);
+
+    const checked = VideoFileSchema.safeParse({ name: file.name, type: file.type, size: file.size });
+    if (!checked.success) {
+      setProblem({ code: "invalid_input", text: hintFor("invalid_input") });
+      return;
+    }
+    const video = videoRef.current;
+    if (!video) {
+      setProblem({ code: "not_configured", text: hintFor("not_configured") });
+      return;
+    }
+
+    setFileStatus("loading");
+    const url = URL.createObjectURL(file);
+    objectUrlRef.current = url;
+    video.srcObject = null;
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+
+    const readable = await new Promise<boolean>((resolve) => {
+      const done = (ok: boolean) => () => {
+        video.removeEventListener("loadedmetadata", onMeta);
+        video.removeEventListener("error", onError);
+        resolve(ok);
+      };
+      const onMeta = done(true);
+      const onError = done(false);
+      video.addEventListener("loadedmetadata", onMeta);
+      video.addEventListener("error", onError);
+    });
+    if (objectUrlRef.current !== url) return; // replaced or stopped meanwhile
+    if (!readable || (Number.isFinite(video.duration) && video.duration > MAX_CLIP_SECONDS)) {
+      stopInput();
+      setFileStatus("idle");
+      setProblem({ code: "invalid_input", text: hintFor("invalid_input") });
+      return;
+    }
+
+    const engine = await loadEngine();
+    if (objectUrlRef.current !== url) return;
+    if (isCoreError(engine)) {
+      stopInput();
+      setFileStatus("idle");
+      setProblem({ code: engine.error, text: engine.hint });
+      return;
+    }
+
+    const samples: PoseSample[] = [];
+    const onEnded = () => {
+      runningRef.current = false;
+      fileCleanupRef.current = null;
+      setFileStatus("done");
+      setFps(null);
+      const trace = JumpTraceSchema.safeParse(samples);
+      if (!trace.success) {
+        setProblem({ code: "parse_failure", text: hintFor("parse_failure") });
+        return;
+      }
+      setLive({ samples: trace.data, analysis: analyzeJump(trace.data), origin: "file", fileName: file.name });
+    };
+    video.addEventListener("ended", onEnded, { once: true });
+    fileCleanupRef.current = () => video.removeEventListener("ended", onEnded);
+
+    video.currentTime = 0;
+    video.playbackRate = FILE_PLAYBACK_RATE;
+    runningRef.current = true;
+    setFileStatus("running");
+    runLoop(engine, (s) => {
+      const last = samples[samples.length - 1];
+      if (!last || s.t > last.t) samples.push(s);
+    });
+    try {
+      await video.play();
+    } catch {
+      if (objectUrlRef.current !== url) return;
+      stopInput();
+      setFileStatus("idle");
+      setProblem({ code: "invalid_input", text: hintFor("invalid_input") });
     }
   };
 
@@ -232,79 +435,81 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
 
   const a = current?.analysis ?? null;
   const est = a?.estimates ?? null;
+  const running = (mode === "camera" && cam === "live") || (mode === "file" && fileStatus === "running");
+
+  const stageMessage =
+    mode === "camera"
+      ? cam === "loading"
+        ? "Starting the camera and downloading the pose model (a few MB, cached after the first time)."
+        : cam === "error"
+          ? "Camera stopped."
+          : cam === "idle"
+            ? "Camera is off."
+            : null
+      : fileStatus === "loading"
+        ? "Loading the clip and the pose model."
+        : fileStatus === "idle"
+          ? `No clip loaded. Pick a video of one jump, up to ${MAX_CLIP_SECONDS} seconds and ${MAX_CLIP_MB} MB, with the whole body in view.`
+          : null;
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap gap-2" role="group" aria-label="Input">
-        <Button variant={mode === "camera" ? "default" : "soft"} aria-pressed={mode === "camera"} onClick={() => setMode("camera")}>
+        <Button
+          variant={mode === "camera" ? "default" : "soft"}
+          aria-pressed={mode === "camera"}
+          onClick={() => {
+            if (mode !== "camera") stopInput();
+            setProblem(null);
+            setMode("camera");
+          }}
+        >
           <Camera /> Live camera
+        </Button>
+        <Button
+          variant={mode === "file" ? "default" : "soft"}
+          aria-pressed={mode === "file"}
+          onClick={() => {
+            if (mode !== "file") {
+              stopInput();
+              setProblem(null);
+              setFileStatus("idle");
+            }
+            setMode("file");
+            pickClip();
+          }}
+        >
+          <Film /> Recorded clip
         </Button>
         <Button
           variant={mode === "replay" ? "default" : "soft"}
           aria-pressed={mode === "replay"}
           onClick={() => {
-            stopCamera();
+            stopInput();
+            setProblem(null);
             setMode("replay");
           }}
         >
-          <Film /> Recorded jumps
+          <Rewind /> Seeded jumps
         </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/*"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          onChange={onClipPicked}
+        />
       </div>
 
-      {mode === "camera" ? (
+      {mode === "replay" ? (
         <Card>
           <CardHeader>
-            <CardTitle>Live camera</CardTitle>
+            <CardTitle>Seeded jumps from {lesson.className}</CardTitle>
             <CardDescription>
-              Stand 2 to 3 metres from the laptop with your whole body in frame, wait one second, then jump straight
-              up. Frames are processed on this device and never uploaded.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="relative aspect-video overflow-hidden rounded-2xl bg-secondary">
-              <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full -scale-x-100 object-cover" />
-              <canvas ref={canvasRef} className="absolute inset-0 h-full w-full -scale-x-100 object-cover" />
-              {cam !== "live" && (
-                <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
-                  {cam === "loading"
-                    ? "Starting the camera and downloading the pose model (a few MB, cached after the first time)."
-                    : cam === "error"
-                      ? "Camera stopped."
-                      : "Camera is off."}
-                </div>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {cam === "live" ? (
-                <Button variant="secondary" onClick={stopCamera}>
-                  <CameraOff /> Stop camera
-                </Button>
-              ) : (
-                <Button onClick={startCamera} disabled={cam === "loading"}>
-                  <Camera /> {cam === "loading" ? "Starting" : "Start camera"}
-                </Button>
-              )}
-              {cam === "live" && fps !== null && <Badge variant="sun">camera at {fps} fps</Badge>}
-              {cam === "live" && hint && <Badge variant="warn">{hint}</Badge>}
-            </div>
-            {camError && (
-              <div className="space-y-3 rounded-2xl bg-background p-4 text-sm">
-                <Badge variant="bad">Camera unavailable</Badge>
-                <p>{camError}</p>
-                <Button variant="soft" size="sm" onClick={() => setMode("replay")}>
-                  Use a recorded jump instead
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Recorded jumps from {lesson.className}</CardTitle>
-            <CardDescription>
-              Seeded demo clips rebuilt frame by frame with webcam jitter. The same solver as the live camera runs on
-              each one.
+              Sample data: demo clips rebuilt frame by frame with webcam jitter. The same solver as the live camera runs
+              on each one.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -328,13 +533,91 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
             ))}
           </CardContent>
         </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>{mode === "camera" ? "Live camera" : "Recorded clip"}</CardTitle>
+            <CardDescription>
+              {mode === "camera"
+                ? "Stand 2 to 3 metres from the laptop with your whole body in frame, wait one second, then jump straight up. Frames are processed on this device and never uploaded."
+                : "Load a phone or laptop video of one jump: stand still for a second at the start, then jump straight up. The same pose model and solver run on it, in this browser, at half speed so no frame is skipped. The file never leaves this device."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="relative aspect-video overflow-hidden rounded-2xl bg-secondary">
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                className={cn("absolute inset-0 h-full w-full object-contain", mode === "camera" && "-scale-x-100 object-cover")}
+              />
+              <canvas
+                ref={canvasRef}
+                className={cn("absolute inset-0 h-full w-full object-contain", mode === "camera" && "-scale-x-100 object-cover")}
+              />
+              {stageMessage && (
+                <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                  {stageMessage}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {mode === "camera" ? (
+                cam === "live" ? (
+                  <Button variant="secondary" onClick={stopInput}>
+                    <CameraOff /> Stop camera
+                  </Button>
+                ) : (
+                  <Button onClick={startCamera} disabled={cam === "loading"}>
+                    <Camera /> {cam === "loading" ? "Starting" : "Start camera"}
+                  </Button>
+                )
+              ) : fileStatus === "running" ? (
+                <Button variant="secondary" onClick={stopInput}>
+                  <Square /> Stop clip
+                </Button>
+              ) : (
+                <Button onClick={pickClip} disabled={fileStatus === "loading"}>
+                  <Film /> {fileStatus === "loading" ? "Loading" : fileName ? "Choose another clip" : "Choose a clip"}
+                </Button>
+              )}
+              {running && fps !== null && (
+                <Badge variant="sun">
+                  {mode === "camera" ? "camera at" : "tracking at"} {fps} fps
+                </Badge>
+              )}
+              {running && hint && <Badge variant="warn">{hint}</Badge>}
+              {mode === "file" && fileName && fileStatus !== "idle" && (
+                <span className="text-sm text-muted-foreground">{fileName}</span>
+              )}
+            </div>
+            {problem && (
+              <div className="space-y-3 rounded-2xl bg-background p-4 text-sm">
+                <Badge variant={toneFor(problem.code)}>{problemTitle(problem.code)}</Badge>
+                <p>{problem.text}</p>
+                <Button
+                  variant="soft"
+                  size="sm"
+                  onClick={() => {
+                    stopInput();
+                    setProblem(null);
+                    setMode("replay");
+                  }}
+                >
+                  Use a seeded jump instead
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <section aria-live="polite" className="space-y-4">
         {!current || !a ? (
           <Card className="p-6 text-muted-foreground">
-            No jump yet. Once the camera sees you stand still and land a jump, the arc and the height appear here about
-            a second after landing.
+            {mode === "file"
+              ? "No measured clip yet. When the clip finishes playing, the arc and the height appear here."
+              : "No jump yet. Once the camera sees you stand still and land a jump, the arc and the height appear here about a second after landing."}
           </Card>
         ) : (
           <>
@@ -344,11 +627,20 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
                 <CardContent className="space-y-4 pt-6">
                   <div>
                     <p className="font-display text-6xl font-extrabold">{est.flightTimeCm.toFixed(0)} cm</p>
+                    <p className="mt-1 text-sm font-bold" data-origin={current.origin}>
+                      {current.label}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       scale from gravity: {Math.round(a.pxPerMetre ?? 0)} px/m, fit R² {a.fit?.r2.toFixed(3)},{" "}
                       {a.airborneFrames} airborne frames at {Math.round(a.fps)} fps
                     </p>
                   </div>
+                  {a.flags.drift && (
+                    <div className="space-y-2 rounded-2xl bg-background p-4 text-sm">
+                      <Badge variant="warn">Moved during the jump</Badge>
+                      <p className="text-warn">{hintFor("drift")}</p>
+                    </div>
+                  )}
                   <dl className="divide-y divide-border rounded-2xl bg-background">
                     <div className="flex items-baseline justify-between gap-4 px-4 py-3">
                       <dt>Frame counting</dt>
@@ -373,8 +665,9 @@ export function JumpLab({ lesson: payload }: { lesson: LessonPayload }) {
               </Card>
             ) : (
               <Card className="space-y-2 p-6">
-                <Badge variant="warn">Jump rejected</Badge>
-                <p>{a.reason}</p>
+                <Badge variant={toneFor(a.code)}>{problemTitle(a.code)}</Badge>
+                <p className={toneFor(a.code) === "bad" ? "text-bad" : "text-warn"}>{a.reason}</p>
+                <p className="text-sm text-muted-foreground">{current.label}</p>
               </Card>
             )}
           </>
