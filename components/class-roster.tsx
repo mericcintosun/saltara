@@ -93,7 +93,8 @@ export function ClassRoster({
             No students yet. Add a name above, or restore the demo class.
           </p>
         ) : (
-          <ul className="space-y-2">
+          <div className="overflow-x-auto rounded-2xl">
+          <ul className="min-w-max space-y-2 sm:min-w-0">
             {roster.map((s) => {
               const best = bestOf(s);
               const isActive = s.id === activeId;
@@ -126,6 +127,7 @@ export function ClassRoster({
               );
             })}
           </ul>
+          </div>
         )}
 
         <div className="flex flex-wrap gap-2">

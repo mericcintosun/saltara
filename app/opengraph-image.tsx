@@ -1,11 +1,12 @@
 import { ImageResponse } from "next/og";
+import { brandHex } from "@/lib/tokens";
 
 export const alt = "Saltara: vertical jump height from a laptop webcam, with gravity as the ruler";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 // IDENTITY.md palette (D12 orchard). ImageResponse cannot read CSS variables.
-const C = { ground: "#f7f9f1", surface: "#edf2e2", ink: "#22301c", plum: "#7c3aa3", sun: "#e8b73a", line: "#cfdbbb" };
+const C = brandHex;
 
 export default function OpengraphImage() {
   return new ImageResponse(

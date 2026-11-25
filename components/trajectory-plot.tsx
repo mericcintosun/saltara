@@ -53,11 +53,12 @@ export function TrajectoryPlot({
   const apex = analysis.apex;
 
   return (
+    <div className="overflow-x-auto rounded-2xl">
     <svg
       viewBox={`0 0 ${W} ${H}`}
       role="img"
       aria-label="Hip height over time during the jump, with the fitted flight parabola"
-      className={cn("h-auto w-full rounded-2xl bg-card", className)}
+      className={cn("h-auto w-full min-w-[20rem] rounded-2xl bg-card", className)}
     >
       <line x1={pad.l} x2={W - pad.r} y1={H - pad.b + 8} y2={H - pad.b + 8} className="stroke-border" strokeWidth={2} strokeLinecap="round" />
       <text x={W - pad.r} y={H - 8} textAnchor="end" className="fill-muted-foreground text-[11px]">
@@ -109,5 +110,6 @@ export function TrajectoryPlot({
         </g>
       )}
     </svg>
+    </div>
   );
 }

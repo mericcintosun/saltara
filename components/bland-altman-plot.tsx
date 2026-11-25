@@ -25,7 +25,8 @@ export function BlandAltmanPlot({ stats, label }: { stats: BlandAltman; label: s
   );
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} className="h-auto w-full rounded-2xl bg-card">
+    <div className="overflow-x-auto rounded-2xl">
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} className="h-auto w-full min-w-[20rem] rounded-2xl bg-card">
       {ticks.map((t) => (
         <text key={t} x={pad.l - 8} y={py(t) + 4} textAnchor="end" className="fill-muted-foreground text-[11px]">
           {t > 0 ? `+${t}` : t}
@@ -45,5 +46,6 @@ export function BlandAltmanPlot({ stats, label }: { stats: BlandAltman; label: s
         Saltara minus wall (cm)
       </text>
     </svg>
+    </div>
   );
 }

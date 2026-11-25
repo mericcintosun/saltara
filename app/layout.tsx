@@ -17,7 +17,7 @@ const atkinson = Atkinson_Hyperlegible({
 });
 
 export const metadata: Metadata = {
-  title: "Saltara: vertical jump height from a laptop webcam",
+  title: { default: "Saltara: vertical jump height from a laptop webcam", template: "%s | Saltara" },
   description:
     "Jump in front of your laptop camera. Saltara uses gravity as the ruler and measures your vertical jump in centimetres: no mat, no force plate, no tape measure, no calibration.",
   metadataBase: new URL("https://saltara.vercel.app"),
