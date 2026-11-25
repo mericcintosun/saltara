@@ -27,6 +27,21 @@ function lessonMinutes(recordedAt: string[]): number {
   return Math.round((Math.max(...times) - Math.min(...times)) / 60000);
 }
 
+/** No recorded jumps in the lesson: point to the lab instead of showing an empty deck. */
+function StoryEmptyState() {
+  return (
+    <div className="flex items-center gap-3 rounded-3xl bg-card p-6 text-lg leading-relaxed">
+      <span aria-hidden className="size-3 shrink-0 rounded-full bg-sun" />
+      <p>
+        No recorded jumps in this lesson yet. Turn on the camera and jump.{" "}
+        <Link href="/play" className="font-bold text-primary underline decoration-sun decoration-2 underline-offset-4">
+          Open the jump lab
+        </Link>
+      </p>
+    </div>
+  );
+}
+
 /**
  * The home story. One live figure (trajectory + throwable deck of the lesson's
  * jumps) stays pinned while five chapters scroll past and change what it shows.
@@ -68,19 +83,7 @@ export function StoryStage({ lesson: payload, classScene }: { lesson: LessonPayl
   };
 
   const run = runs[index] ?? runs[0];
-  if (!run) {
-    return (
-      <div className="flex items-center gap-3 rounded-3xl bg-card p-6 text-lg leading-relaxed">
-        <span aria-hidden className="size-3 shrink-0 rounded-full bg-sun" />
-        <p>
-          No recorded jumps in this lesson yet. Turn on the camera and jump.{" "}
-          <Link href="/play" className="font-bold text-primary underline decoration-sun decoration-2 underline-offset-4">
-            Open the jump lab
-          </Link>
-        </p>
-      </div>
-    );
-  }
+  if (payload.jumps.length === 0 || !run) return <StoryEmptyState />;
   const a = run.analysis;
   const name = studentName(run.jump.studentId);
   const first = name.split(" ")[0];

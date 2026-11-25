@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function HomeErrorState({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
     <div className="mx-auto max-w-prose px-5 py-24">
       <div className="space-y-4 rounded-3xl bg-card p-8 text-center">

@@ -23,6 +23,23 @@ function Fold({ summary, children }: { summary: string; children: React.ReactNod
   );
 }
 
+function PilotEmptyState() {
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-card p-5 leading-relaxed">
+      <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
+      <p className="flex-1">
+        No pilot jumps recorded yet. The agreement plot appears here once the first wall-mark session is in.
+      </p>
+      <Link
+        href="/play"
+        className="font-bold text-primary underline decoration-sun decoration-2 underline-offset-4"
+      >
+        Measure a jump in the lab
+      </Link>
+    </div>
+  );
+}
+
 export default async function NotesPage() {
   const { rows: pilotRows, placeholder: pilotIsPlaceholder } = await getAdapter().getPilot();
   const hasRows = pilotRows.length > 0;
@@ -96,10 +113,7 @@ export default async function NotesPage() {
             </p>
           </>
         ) : (
-          <p className="flex items-center gap-3 rounded-2xl bg-card p-5 leading-relaxed">
-            <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-sun" />
-            No pilot jumps recorded yet. The agreement plot appears here once the first wall-mark session is in.
-          </p>
+          <PilotEmptyState />
         )}
         <div className="overflow-hidden rounded-3xl">
           <SceneSlot
