@@ -7,6 +7,7 @@ import { join } from "node:path";
 const root = process.cwd();
 const LESSON = join(root, "fixtures", "lesson-9b.json");
 const PILOT = join(root, "fixtures", "pilot-placeholder.json");
+const REAL_PILOT = join(root, "fixtures", "pilot.json");
 
 const errors = [];
 const fail = (msg) => errors.push(msg);
@@ -54,21 +55,29 @@ if (!Array.isArray(lesson.students) || !Array.isArray(lesson.seedJumps)) {
   lesson.seedJumps.sort(byId);
 }
 
-// Pilot rows
-const pilot = read(PILOT);
-if (typeof pilot.placeholder !== "boolean") fail("pilot: placeholder must be a boolean");
-if (!Array.isArray(pilot.rows)) {
-  fail("pilot: rows must be an array");
-} else {
-  checkUnique(pilot.rows, /^p-\d{2}$/, "pilot rows");
-  for (const r of pilot.rows) {
-    if (r.jumper !== "P1" && r.jumper !== "P2") fail(`${r.id}: jumper must be P1 or P2`);
+// Pilot rows: the same checks for the placeholder and for the real slot.
+function checkPilotRows(file, rows) {
+  if (!Array.isArray(rows)) {
+    fail(`${file}: rows must be an array`);
+    return;
+  }
+  checkUnique(rows, /^p-\d{2}$/, `${file} rows`);
+  for (const r of rows) {
+    if (r.jumper !== "P1" && r.jumper !== "P2") fail(`${file} ${r.id}: jumper must be P1 or P2`);
     for (const k of ["wallCm", "frameCountCm", "flightTimeCm", "displacementCm"]) {
-      if (!inRange(r[k], 0, 150)) fail(`${r.id}: ${k} out of range`);
+      if (!inRange(r[k], 0, 150)) fail(`${file} ${r.id}: ${k} out of range`);
     }
   }
-  pilot.rows.sort(byId);
+  rows.sort(byId);
 }
+
+const pilot = read(PILOT);
+if (typeof pilot.placeholder !== "boolean") fail("pilot: placeholder must be a boolean");
+checkPilotRows("pilot-placeholder", pilot.rows);
+
+// Real pilot slot (filled by the human wall-mark session).
+const realPilot = read(REAL_PILOT);
+checkPilotRows("pilot", realPilot.rows);
 
 if (errors.length) {
   console.error(`seed: ${errors.length} problem(s) in fixtures/`);
@@ -78,6 +87,7 @@ if (errors.length) {
 
 writeFileSync(LESSON, JSON.stringify(lesson, null, 2) + "\n");
 writeFileSync(PILOT, JSON.stringify(pilot, null, 2) + "\n");
+writeFileSync(REAL_PILOT, JSON.stringify(realPilot, null, 2) + "\n");
 console.log(
-  `seed: ok, ${lesson.students.length} students, ${lesson.seedJumps.length} jumps, ${pilot.rows.length} pilot rows (placeholder: ${pilot.placeholder})`
+  `seed: ok, ${lesson.students.length} students, ${lesson.seedJumps.length} jumps, ${pilot.rows.length} pilot rows (placeholder: ${pilot.placeholder}), ${realPilot.rows.length} real pilot rows`
 );

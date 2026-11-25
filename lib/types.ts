@@ -1,6 +1,8 @@
 // Shared types for the Saltara data path:
 // fixtures/*.json -> lib/data/seed.ts -> lib/adapter.ts -> page -> client component.
 
+import type { CoreErrorCode } from "@/lib/errors";
+
 export type { PoseSample } from "@/lib/jump-solver";
 
 export interface Student {
@@ -58,13 +60,22 @@ export interface PilotPayload {
 
 export type AdapterMode = "fake" | "real";
 
-/** The one response shape shared by every /api route. */
-export type ApiResponse<T> = {
+export interface ApiSuccess<T> {
   ok: true;
   mode: AdapterMode;
   source: "seed" | "pilot" | "live";
   data: T;
-};
+}
+
+/** A failed /api call: a typed code from lib/errors.ts and one human sentence. */
+export interface ApiFailure {
+  ok: false;
+  error: CoreErrorCode;
+  hint: string;
+}
+
+/** The one response shape shared by every /api route. */
+export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
 /** Where /play starts and the sentence that tells the reader which engine serves it. */
 export interface SourceInfo {
