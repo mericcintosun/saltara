@@ -5,6 +5,25 @@
 //   y(t) = a t^2 + b t + c   with   a = (g / 2) * pxPerMetre
 // so the curvature of the fitted parabola gives the pixel-to-metre scale with
 // no calibration object in the frame.
+//
+// Every gate lives in lib/config.ts. Rejections carry a typed CoreErrorCode.
+
+import {
+  CORE_LOG_PREFIX,
+  MIN_AIRBORNE_FRAMES,
+  MIN_CLIP_SAMPLES,
+  MIN_R2,
+  PRE_TAKEOFF_SECONDS,
+  SETTLE_SECONDS,
+  SHOULDER_DRIFT_MAX,
+  STANDING_WINDOW_SECONDS,
+  STILL_FRACTION_OF_LEG,
+  TAKEOFF_FRACTION_OF_LEG,
+  TAKEOFF_MIN_PX,
+  WATCHER_BUFFER_SECONDS,
+  WATCHER_STILL_FRAMES,
+} from "@/lib/config";
+import { hintFor, type CoreErrorCode } from "@/lib/errors";
 
 export const G = 9.81;
 
@@ -16,6 +35,13 @@ export interface PoseSample {
   hipY: number;
   /** Mean of the left and right ankle landmark y, in pixels. */
   ankleY: number;
+  /** Shoulder width in pixels (live and file frames only), used by the drift flag. */
+  shoulderW?: number;
+}
+
+export interface JumpFlags {
+  /** Shoulder width changed by more than SHOULDER_DRIFT_MAX over the clip. */
+  drift: boolean;
 }
 
 export interface ParabolaFit {
@@ -38,8 +64,12 @@ export interface JumpEstimates {
 
 export interface JumpAnalysis {
   ok: boolean;
+  /** Typed rejection code when ok is false, else null. */
+  code: CoreErrorCode | null;
   /** Human-readable reason when ok is false. */
   reason: string | null;
+  /** Soft warnings that keep the result. */
+  flags: JumpFlags;
   fps: number;
   standingHipY: number;
   standingAnkleY: number;
@@ -55,9 +85,6 @@ export interface JumpAnalysis {
   roots: [number, number] | null;
   estimates: JumpEstimates | null;
 }
-
-const MIN_AIRBORNE_FRAMES = 6;
-const MIN_R2 = 0.9;
 
 function median(values: number[]): number {
   const s = [...values].sort((x, y) => x - y);
@@ -109,36 +136,60 @@ export interface AnalyzeOptions {
   standingAnkleY?: number;
 }
 
+/** True when shoulder width (where known) changes by more than SHOULDER_DRIFT_MAX across the clip. */
+export function shoulderDrift(samples: PoseSample[]): boolean {
+  let lo = Infinity;
+  let hi = -Infinity;
+  let count = 0;
+  for (const s of samples) {
+    const w = s.shoulderW;
+    if (typeof w !== "number" || !Number.isFinite(w) || w <= 0) continue;
+    count += 1;
+    if (w < lo) lo = w;
+    if (w > hi) hi = w;
+  }
+  if (count < 2) return false;
+  return hi / lo > 1 + SHOULDER_DRIFT_MAX;
+}
+
 export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): JumpAnalysis {
   const n = samples.length;
   const fps = n > 1 ? (n - 1) / (samples[n - 1].t - samples[0].t) : 0;
-  const fail = (reason: string, partial: Partial<JumpAnalysis> = {}): JumpAnalysis => ({
-    ok: false,
-    reason,
-    fps,
-    standingHipY: partial.standingHipY ?? 0,
-    standingAnkleY: partial.standingAnkleY ?? 0,
-    takeoffIndex: partial.takeoffIndex ?? -1,
-    landingIndex: partial.landingIndex ?? -1,
-    airborneFrames: partial.airborneFrames ?? 0,
-    fit: null,
-    pxPerMetre: null,
-    apex: null,
-    roots: null,
-    estimates: null,
-  });
+  const flags: JumpFlags = { drift: shoulderDrift(samples) };
+  const fail = (code: CoreErrorCode, partial: Partial<JumpAnalysis> = {}, reason: string = hintFor(code)): JumpAnalysis => {
+    console.info(`${CORE_LOG_PREFIX} rejected`, { code });
+    return {
+      ok: false,
+      code,
+      reason,
+      flags,
+      fps,
+      standingHipY: partial.standingHipY ?? 0,
+      standingAnkleY: partial.standingAnkleY ?? 0,
+      takeoffIndex: partial.takeoffIndex ?? -1,
+      landingIndex: partial.landingIndex ?? -1,
+      airborneFrames: partial.airborneFrames ?? 0,
+      fit: null,
+      pxPerMetre: null,
+      apex: null,
+      roots: null,
+      estimates: null,
+    };
+  };
 
-  if (n < 20) return fail("Not enough frames yet. Stand still for a second before jumping.");
+  if (n < MIN_CLIP_SAMPLES) {
+    return fail("too_few_frames", {}, `Only ${n} frames so far. Stand still for a second before jumping.`);
+  }
 
   // 1. Standing baseline: the first half second, unless the caller already knows it.
-  const standingWindow = samples.filter((s) => s.t - samples[0].t < 0.5);
+  const standingWindow = samples.filter((s) => s.t - samples[0].t < STANDING_WINDOW_SECONDS);
   const standingHipY = opts.standingHipY ?? median(standingWindow.map((s) => s.hipY));
   const standingAnkleY = opts.standingAnkleY ?? median(standingWindow.map((s) => s.ankleY));
   const legPx = standingAnkleY - standingHipY;
-  if (legPx <= 0) return fail("Hips and ankles are not both visible. Step back so your whole body is in frame.");
+  if (legPx <= 0) return fail("feet_hidden");
 
   // 2. Take-off and landing from ankle rise above the standing ankle.
-  const threshold = Math.max(0.04 * legPx, 6);
+  const threshold = Math.max(TAKEOFF_FRACTION_OF_LEG * legPx, TAKEOFF_MIN_PX);
   const rise = (s: PoseSample) => standingAnkleY - s.ankleY;
   const searchFrom = opts.standingHipY === undefined ? standingWindow.length : 0;
   let takeoffIndex = -1;
@@ -148,7 +199,10 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
       break;
     }
   }
-  if (takeoffIndex < 1) return fail("No take-off found in this clip.", { standingHipY, standingAnkleY });
+  if (takeoffIndex < 1) {
+    return fail("no_jump", { standingHipY, standingAnkleY }, "No take-off found in this clip. Stand still for a second, then jump straight up.");
+  }
+  console.info(`${CORE_LOG_PREFIX} take-off`, { frame: takeoffIndex, t: Number(samples[takeoffIndex].t.toFixed(3)) });
   let landingIndex = -1;
   for (let j = takeoffIndex + 1; j < n; j++) {
     if (rise(samples[j]) <= threshold) {
@@ -156,14 +210,18 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
       break;
     }
   }
-  if (landingIndex < 0) return fail("No landing found yet.", { standingHipY, standingAnkleY, takeoffIndex });
+  if (landingIndex < 0) {
+    return fail("no_jump", { standingHipY, standingAnkleY, takeoffIndex }, "No landing found in this clip yet.");
+  }
+  console.info(`${CORE_LOG_PREFIX} landing`, { frame: landingIndex, t: Number(samples[landingIndex].t.toFixed(3)) });
 
   const airborne = samples.slice(takeoffIndex, landingIndex);
   const partial = { standingHipY, standingAnkleY, takeoffIndex, landingIndex, airborneFrames: airborne.length };
   if (airborne.length < MIN_AIRBORNE_FRAMES) {
     return fail(
-      `Only ${airborne.length} airborne frames. Step back from the camera and add light so it holds at least 25 fps.`,
-      partial
+      "too_few_frames",
+      partial,
+      `Only ${airborne.length} airborne frames, at least ${MIN_AIRBORNE_FRAMES} are needed. Step back from the camera and add light so it holds at least 25 fps.`
     );
   }
 
@@ -173,10 +231,16 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
     airborne.map((s) => s.t - t0),
     airborne.map((s) => s.hipY)
   );
-  if (!raw) return fail("The flight points could not be fitted.", partial);
-  if (raw.a <= 0) return fail("The hip did not fall like a free body. Jump straight up, not forward.", partial);
+  if (!raw) return fail("low_fit", partial, "The flight points could not be fitted. Try steadier light and a plain wall.");
+  if (raw.a <= 0) {
+    return fail("low_fit", partial, "The hip did not fall like a free body. Jump straight up, not forward.");
+  }
   if (raw.r2 < MIN_R2) {
-    return fail(`Fit quality R² ${raw.r2.toFixed(2)} is below ${MIN_R2}. Try steadier light and a plain wall.`, partial);
+    return fail(
+      "low_fit",
+      partial,
+      `Fit quality R² ${raw.r2.toFixed(2)} is below ${MIN_R2}. Try steadier light and a plain wall.`
+    );
   }
   const fit: ParabolaFit = { ...raw, t0 };
 
@@ -189,7 +253,7 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
   //    stays constant. TODO: refine with the toe landmarks (31, 32) once tested on real clips.
   const yRef = median(airborne.map((s) => s.hipY + rise(s)));
   const disc = fit.b * fit.b - 4 * fit.a * (fit.c - yRef);
-  if (disc <= 0) return fail("The fitted arc never reaches take-off height.", partial);
+  if (disc <= 0) return fail("low_fit", partial, "The fitted arc never reaches take-off height.");
   const sq = Math.sqrt(disc);
   const r1 = (-fit.b - sq) / (2 * fit.a) + t0;
   const r2 = (-fit.b + sq) / (2 * fit.a) + t0;
@@ -203,9 +267,17 @@ export function analyzeJump(samples: PoseSample[], opts: AnalyzeOptions = {}): J
     displacementCm: ((standingHipY - apexY) / pxPerMetre) * 100,
   };
 
+  console.info(`${CORE_LOG_PREFIX} fit ok`, {
+    frames: airborne.length,
+    r2: Number(fit.r2.toFixed(3)),
+    pxPerMetre: Math.round(pxPerMetre),
+  });
+
   return {
     ok: true,
+    code: null,
     reason: null,
+    flags,
     fps,
     ...partial,
     fit,
@@ -222,7 +294,7 @@ export function headlineCm(a: JumpAnalysis): number | null {
 }
 
 /**
- * Live jump watcher for the camera. Keeps a 4 second ring buffer, learns the
+ * Live jump watcher for the camera. Keeps a short ring buffer, learns the
  * standing baseline while the jumper is still, and calls onJump once per landing.
  */
 export function createJumpWatcher(onJump: (samples: PoseSample[], analysis: JumpAnalysis) => void) {
@@ -241,26 +313,28 @@ export function createJumpWatcher(onJump: (samples: PoseSample[], analysis: Jump
     },
     push(s: PoseSample) {
       buf.push(s);
-      buf = buf.filter((x) => x.t > s.t - 4);
-      if (buf.length < 15) return;
+      buf = buf.filter((x) => x.t > s.t - WATCHER_BUFFER_SECONDS);
+      if (buf.length < WATCHER_STILL_FRAMES) return;
+      const threshold = (b: { hip: number; ankle: number }) =>
+        Math.max(TAKEOFF_FRACTION_OF_LEG * (b.ankle - b.hip), TAKEOFF_MIN_PX);
 
       if (state === "ground") {
-        const recent = buf.slice(-15);
+        const recent = buf.slice(-WATCHER_STILL_FRAMES);
         const hips = recent.map((x) => x.hipY);
         const leg = baseline ? baseline.ankle - baseline.hip : median(recent.map((x) => x.ankleY)) - median(hips);
-        const still = Math.max(...hips) - Math.min(...hips) < 0.03 * Math.max(leg, 1);
+        const still = Math.max(...hips) - Math.min(...hips) < STILL_FRACTION_OF_LEG * Math.max(leg, 1);
         if (still) baseline = { hip: median(hips), ankle: median(recent.map((x) => x.ankleY)) };
-        if (baseline && baseline.ankle - s.ankleY > Math.max(0.04 * (baseline.ankle - baseline.hip), 6)) {
+        if (baseline && baseline.ankle - s.ankleY > threshold(baseline)) {
           state = "air";
           takeoffAt = s.t;
         }
       } else if (state === "air" && baseline) {
-        if (baseline.ankle - s.ankleY <= Math.max(0.04 * (baseline.ankle - baseline.hip), 6)) {
+        if (baseline.ankle - s.ankleY <= threshold(baseline)) {
           state = "settling";
           landedAt = s.t;
         }
-      } else if (state === "settling" && baseline && s.t - landedAt > 0.35) {
-        const clip = buf.filter((x) => x.t >= takeoffAt - 0.4);
+      } else if (state === "settling" && baseline && s.t - landedAt > SETTLE_SECONDS) {
+        const clip = buf.filter((x) => x.t >= takeoffAt - PRE_TAKEOFF_SECONDS);
         onJump(clip, analyzeJump(clip, { standingHipY: baseline.hip, standingAnkleY: baseline.ankle }));
         state = "ground";
       }
